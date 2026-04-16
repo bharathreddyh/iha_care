@@ -266,8 +266,10 @@ class _NewBillScreenState extends State<NewBillScreen> {
                     '${s.name}  (${formatCurrency(s.price)})',
                 optionsBuilder: (textEditingValue) {
                   final query = textEditingValue.text.trim().toLowerCase();
-                  if (query.isEmpty) return _scanTypes;
-                  return _scanTypes.where((s) =>
+                  final sorted = [..._scanTypes]..sort((a, b) =>
+                      a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                  if (query.isEmpty) return sorted;
+                  return sorted.where((s) =>
                       s.name.toLowerCase().contains(query) ||
                       s.category.toLowerCase().contains(query));
                 },
