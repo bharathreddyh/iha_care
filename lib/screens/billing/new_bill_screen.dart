@@ -256,20 +256,75 @@ class _NewBillScreenState extends State<NewBillScreen> {
               _sectionTitle('Scan Details'),
               const SizedBox(height: 8),
 
-              DropdownButtonFormField<ScanType>(
-                value: _selectedScan,
-                decoration: const InputDecoration(labelText: 'Scan Type *'),
-                items: _scanTypes
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text('${s.name}  (${formatCurrency(s.price)})'),
-                        ))
-                    .toList(),
-                onChanged: (s) => setState(() {
+              Autocomplete<ScanType>(
+                initialValue: TextEditingValue(
+                  text: _selectedScan == null
+                      ? ''
+                      : '${_selectedScan!.name}  (${formatCurrency(_selectedScan!.price)})',
+                ),
+                displayStringForOption: (s) =>
+                    '${s.name}  (${formatCurrency(s.price)})',
+                optionsBuilder: (textEditingValue) {
+                  final query = textEditingValue.text.trim().toLowerCase();
+                  if (query.isEmpty) return _scanTypes;
+                  return _scanTypes.where((s) =>
+                      s.name.toLowerCase().contains(query) ||
+                      s.category.toLowerCase().contains(query));
+                },
+                onSelected: (s) => setState(() {
                   _selectedScan = s;
                   _discount.text = '0';
                 }),
-                validator: (v) => v == null ? 'Select a scan type' : null,
+                fieldViewBuilder:
+                    (ctx, controller, focusNode, onFieldSubmitted) {
+                  controller.addListener(() {
+                    final text = controller.text.trim();
+                    if (_selectedScan != null &&
+                        text !=
+                            '${_selectedScan!.name}  (${formatCurrency(_selectedScan!.price)})') {
+                      setState(() => _selectedScan = null);
+                    }
+                  });
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Scan Type *',
+                      hintText: 'Type to search…',
+                      suffixIcon: Icon(Icons.search),
+                    ),
+                    validator: (_) =>
+                        _selectedScan == null ? 'Select a scan type' : null,
+                  );
+                },
+                optionsViewBuilder: (ctx, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                            maxHeight: 240, maxWidth: 480),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (ctx, i) {
+                            final s = options.elementAt(i);
+                            return ListTile(
+                              dense: true,
+                              title: Text(s.name),
+                              subtitle: Text(s.category),
+                              trailing: Text(formatCurrency(s.price)),
+                              onTap: () => onSelected(s),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
 
