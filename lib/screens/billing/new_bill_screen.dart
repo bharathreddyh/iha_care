@@ -49,12 +49,14 @@ class _NewBillScreenState extends State<NewBillScreen> {
     final service = context.read<BillingService>();
     final scans = await service.getScanTypes(activeOnly: true);
     final docs = await service.getReferralDoctors(activeOnly: true);
+    final patientId = await service.generatePatientId();
     if (mounted) {
       setState(() {
         _scanTypes = scans;
         _doctors = docs;
         _loading = false;
       });
+      if (_patientId.text.isEmpty) _patientId.text = patientId;
     }
   }
 
@@ -165,6 +167,10 @@ class _NewBillScreenState extends State<NewBillScreen> {
     _patientPhone.clear();
     _discount.text = '0';
     _notes.clear();
+    // Regenerate patient ID for next patient
+    context.read<BillingService>().generatePatientId().then((id) {
+      if (mounted) _patientId.text = id;
+    });
     setState(() {
       _selectedScan = null;
       _selectedDoctor = null;

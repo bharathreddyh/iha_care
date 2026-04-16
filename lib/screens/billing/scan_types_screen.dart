@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
@@ -16,6 +17,8 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
   List<ScanType> _scanTypes = [];
   bool _loading = true;
 
+  static const _categories = ['OB-GYN', 'General', 'Small Parts', 'MSK'];
+
   @override
   void initState() {
     super.initState();
@@ -23,47 +26,33 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
   }
 
   Future<void> _load() async {
-    final service = context.read<BillingService>();
-    final types = await service.getScanTypes();
+    final types = await context.read<BillingService>().getScanTypes();
     if (mounted) setState(() { _scanTypes = types; _loading = false; });
   }
 
-  Future<void> _editPrice(ScanType scan) async {
-    final ctrl = TextEditingController(text: scan.price.toStringAsFixed(0));
-    final confirmed = await showDialog<bool>(
+  Future<void> _openForm([ScanType? existing]) async {
+    await showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(scan.name),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Price (₹)',
-            prefixText: '₹ ',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save'),
-          ),
-        ],
+      isScrollControlled: true,
+      builder: (_) => _ScanTypeForm(
+        existing: existing,
+        categories: _categories,
+        onSave: (scan) async {
+          final service = context.read<BillingService>();
+          if (existing == null) {
+            await service.saveScanType(scan);
+          } else {
+            await service.updateScanType(scan);
+          }
+          _load();
+        },
       ),
     );
-
-    if (confirmed == true) {
-      final newPrice = double.tryParse(ctrl.text) ?? scan.price;
-      final updated = scan.copyWith(price: newPrice);
-      await context.read<BillingService>().updateScanType(updated);
-      _load();
-    }
   }
 
   Future<void> _toggleActive(ScanType scan) async {
-    final updated = scan.copyWith(isActive: !scan.isActive);
-    await context.read<BillingService>().updateScanType(updated);
+    await context.read<BillingService>().updateScanType(
+          scan.copyWith(isActive: !scan.isActive));
     _load();
   }
 
@@ -84,55 +73,199 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
       appBar: AppBar(title: const Text('Scan Types'), actions: [
         IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
       ]),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: grouped.entries.map((entry) {
-          return Column(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openForm(),
+        icon: const Icon(Icons.add),
+        label: const Text('New Scan'),
+      ),
+      body: _scanTypes.isEmpty
+          ? const Center(child: Text('No scan types. Tap + to add.'))
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+              children: grouped.entries.map((entry) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        entry.key,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    Card(
+                      child: Column(
+                        children: entry.value.map((scan) {
+                          return ListTile(
+                            title: Text(
+                              scan.name,
+                              style: TextStyle(
+                                color: scan.isActive ? null : Colors.grey,
+                                decoration: scan.isActive
+                                    ? null
+                                    : TextDecoration.lineThrough,
+                              ),
+                            ),
+                            subtitle: Text(formatCurrency(scan.price)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Switch(
+                                  value: scan.isActive,
+                                  onChanged: (_) => _toggleActive(scan),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () => _openForm(scan),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              }).toList(),
+            ),
+    );
+  }
+}
+
+class _ScanTypeForm extends StatefulWidget {
+  final ScanType? existing;
+  final List<String> categories;
+  final Future<void> Function(ScanType) onSave;
+
+  const _ScanTypeForm({
+    this.existing,
+    required this.categories,
+    required this.onSave,
+  });
+
+  @override
+  State<_ScanTypeForm> createState() => _ScanTypeFormState();
+}
+
+class _ScanTypeFormState extends State<_ScanTypeForm> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _name;
+  late final TextEditingController _price;
+  late String _category;
+  late bool _isActive;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = widget.existing;
+    _name = TextEditingController(text: s?.name ?? '');
+    _price = TextEditingController(text: s?.price.toStringAsFixed(0) ?? '');
+    _category = s?.category ?? widget.categories.first;
+    _isActive = s?.isActive ?? true;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _price.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    final scan = ScanType(
+      id: widget.existing?.id ?? const Uuid().v4(),
+      name: _name.text.trim(),
+      price: double.tryParse(_price.text) ?? 0,
+      category: _category,
+      modality: widget.existing?.modality ?? 'US',
+      isActive: _isActive,
+    );
+    await widget.onSave(scan);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  entry.key,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
+              Text(
+                widget.existing == null ? 'Add Scan Type' : 'Edit Scan Type',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              Card(
-                child: Column(
-                  children: entry.value.map((scan) {
-                    return ListTile(
-                      title: Text(
-                        scan.name,
-                        style: TextStyle(
-                          color: scan.isActive ? null : Colors.grey,
-                          decoration: scan.isActive ? null : TextDecoration.lineThrough,
-                        ),
-                      ),
-                      subtitle: Text(formatCurrency(scan.price)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Switch(
-                            value: scan.isActive,
-                            onChanged: (_) => _toggleActive(scan),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => _editPrice(scan),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Scan Name *'),
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _price,
+                decoration: const InputDecoration(
+                  labelText: 'Price (₹) *',
+                  prefixText: '₹ ',
                 ),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  if ((double.tryParse(v) ?? -1) < 0) return 'Enter valid price';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _category,
+                decoration: const InputDecoration(labelText: 'Category *'),
+                items: widget.categories
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _category = v ?? _category),
               ),
               const SizedBox(height: 8),
+              SwitchListTile(
+                value: _isActive,
+                onChanged: (v) => setState(() => _isActive = v),
+                title: const Text('Active'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: _saving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(widget.existing == null ? 'Add Scan Type' : 'Save Changes'),
+                ),
+              ),
             ],
-          );
-        }).toList(),
+          ),
+        ),
       ),
     );
   }

@@ -35,6 +35,23 @@ class BillingService {
     await _db.update('scan_types', scan.toMap(), 'id = ?', [scan.id]);
   }
 
+  // ── Patient ID ────────────────────────────────────────────────────────────
+
+  Future<String> generatePatientId() async {
+    final today = DateFormat('yyyyMMdd').format(DateTime.now());
+    final rows = await _db.rawQuery(
+      "SELECT patient_id FROM bills WHERE patient_id LIKE ? ORDER BY patient_id DESC LIMIT 1",
+      ['${today}_%'],
+    );
+    int next = 1;
+    if (rows.isNotEmpty) {
+      final last = rows.first['patient_id'] as String? ?? '';
+      final parts = last.split('_');
+      next = (int.tryParse(parts.last) ?? 0) + 1;
+    }
+    return '${today}_${next.toString().padLeft(3, '0')}';
+  }
+
   // ── Referral Doctors ──────────────────────────────────────────────────────
 
   Future<List<ReferralDoctor>> getReferralDoctors({bool activeOnly = false}) async {
