@@ -83,10 +83,28 @@ class _NewBillScreenState extends State<NewBillScreen> {
       lastDate: DateTime.now(),
     );
     if (picked != null) {
-      final formatted =
-          '${picked.year}${picked.month.toString().padLeft(2, '0')}${picked.day.toString().padLeft(2, '0')}';
-      _patientDob.text = formatted;
+      final dd = picked.day.toString().padLeft(2, '0');
+      final mm = picked.month.toString().padLeft(2, '0');
+      _patientDob.text = '$dd/$mm/${picked.year}';
     }
+  }
+
+  /// Converts DD/MM/YYYY user input to YYYYMMDD for DICOM storage.
+  String? _dobToDicom(String input) {
+    final s = input.trim();
+    if (s.isEmpty) return null;
+    final parts = s.split(RegExp(r'[/\-.]'));
+    if (parts.length != 3) return null;
+    final d = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final y = int.tryParse(parts[2]);
+    if (d == null || m == null || y == null) return null;
+    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1900 || y > DateTime.now().year) {
+      return null;
+    }
+    return '${y.toString().padLeft(4, '0')}'
+        '${m.toString().padLeft(2, '0')}'
+        '${d.toString().padLeft(2, '0')}';
   }
 
   Future<void> _submit() async {
@@ -108,7 +126,7 @@ class _NewBillScreenState extends State<NewBillScreen> {
         id: '',
         patientName: _patientName.text.trim(),
         patientId: _patientId.text.trim().isEmpty ? null : _patientId.text.trim(),
-        patientDob: _patientDob.text.trim().isEmpty ? null : _patientDob.text.trim(),
+        patientDob: _dobToDicom(_patientDob.text),
         patientSex: _patientSex,
         patientPhone: _patientPhone.text.trim().isEmpty ? null : _patientPhone.text.trim(),
         scanTypeId: _selectedScan!.id,
@@ -228,12 +246,19 @@ class _NewBillScreenState extends State<NewBillScreen> {
                       controller: _patientDob,
                       decoration: InputDecoration(
                         labelText: 'Date of Birth',
-                        hintText: 'YYYYMMDD',
+                        hintText: 'DD/MM/YYYY',
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.calendar_today_outlined),
                           onPressed: _pickDob,
                         ),
                       ),
+                      keyboardType: TextInputType.datetime,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return null;
+                        return _dobToDicom(v) == null
+                            ? 'Use DD/MM/YYYY'
+                            : null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
