@@ -1,0 +1,187 @@
+import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
+
+class DatabaseHelper {
+  static final DatabaseHelper instance = DatabaseHelper._internal();
+  static Database? _database;
+
+  DatabaseHelper._internal();
+
+  Future<Database> get database async {
+    _database ??= await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final dir = await getApplicationSupportDirectory();
+    final dbPath = join(dir.path, 'iha_care_billing.db');
+    return openDatabase(
+      dbPath,
+      version: 1,
+      onCreate: _onCreate,
+    );
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    final batch = db.batch();
+
+    batch.execute('''
+      CREATE TABLE scan_types (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        price REAL NOT NULL,
+        category TEXT NOT NULL,
+        modality TEXT NOT NULL DEFAULT 'US',
+        is_active INTEGER NOT NULL DEFAULT 1
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE referral_doctors (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT,
+        clinic_name TEXT,
+        specialty TEXT,
+        incentive_type TEXT NOT NULL DEFAULT 'flat',
+        incentive_value REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE bills (
+        id TEXT PRIMARY KEY,
+        patient_name TEXT NOT NULL,
+        patient_id TEXT,
+        patient_dob TEXT,
+        patient_sex TEXT,
+        patient_phone TEXT,
+        scan_type_id TEXT,
+        referral_doctor_id TEXT,
+        scan_fee REAL NOT NULL,
+        discount REAL NOT NULL DEFAULT 0,
+        final_amount REAL NOT NULL,
+        payment_mode TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'paid',
+        accession_number TEXT UNIQUE,
+        worklist_pushed INTEGER NOT NULL DEFAULT 0,
+        scan_completed INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE pcpndt_form_f (
+        id TEXT PRIMARY KEY,
+        bill_id TEXT NOT NULL,
+        patient_id TEXT,
+        referral_doctor_id TEXT,
+        indication TEXT,
+        declaration_signed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE incentive_ledger (
+        id TEXT PRIMARY KEY,
+        referral_doctor_id TEXT NOT NULL,
+        month TEXT NOT NULL,
+        referral_count INTEGER NOT NULL DEFAULT 0,
+        total_billed REAL NOT NULL DEFAULT 0,
+        incentive_amount REAL NOT NULL DEFAULT 0,
+        payment_status TEXT NOT NULL DEFAULT 'unpaid',
+        paid_date TEXT
+      )
+    ''');
+
+    await batch.commit(noResult: true);
+    await _seedScanTypes(db);
+  }
+
+  Future<void> _seedScanTypes(Database db) async {
+    final seeds = [
+      {'id': 'st_001', 'name': 'OB Scan', 'price': 800.0, 'category': 'OB-GYN'},
+      {'id': 'st_002', 'name': 'TVS', 'price': 1200.0, 'category': 'OB-GYN'},
+      {'id': 'st_003', 'name': 'NT Scan', 'price': 1500.0, 'category': 'OB-GYN'},
+      {'id': 'st_004', 'name': 'Anomaly Scan', 'price': 2000.0, 'category': 'OB-GYN'},
+      {'id': 'st_005', 'name': 'Growth Scan', 'price': 1000.0, 'category': 'OB-GYN'},
+      {'id': 'st_006', 'name': 'Doppler', 'price': 1800.0, 'category': 'OB-GYN'},
+      {'id': 'st_007', 'name': 'Abdomen', 'price': 700.0, 'category': 'General'},
+      {'id': 'st_008', 'name': 'Pelvis', 'price': 800.0, 'category': 'General'},
+      {'id': 'st_009', 'name': 'KUB', 'price': 700.0, 'category': 'General'},
+      {'id': 'st_010', 'name': 'Thyroid', 'price': 600.0, 'category': 'Small Parts'},
+      {'id': 'st_011', 'name': 'Breast', 'price': 800.0, 'category': 'Small Parts'},
+      {'id': 'st_012', 'name': 'Scrotal', 'price': 700.0, 'category': 'Small Parts'},
+      {'id': 'st_013', 'name': 'Neck', 'price': 600.0, 'category': 'Small Parts'},
+      {'id': 'st_014', 'name': 'MSK USG', 'price': 900.0, 'category': 'MSK'},
+    ];
+
+    for (final seed in seeds) {
+      await db.insert(
+        'scan_types',
+        {...seed, 'modality': 'US', 'is_active': 1},
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+  }
+
+  Future<int> insert(String table, Map<String, dynamic> row) async {
+    final db = await database;
+    return db.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> query(
+    String table, {
+    String? where,
+    List<dynamic>? whereArgs,
+    String? orderBy,
+    int? limit,
+    String? columns,
+  }) async {
+    final db = await database;
+    return db.query(
+      table,
+      columns: columns != null ? columns.split(',').map((c) => c.trim()).toList() : null,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy,
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> rawQuery(
+    String sql, [
+    List<dynamic>? args,
+  ]) async {
+    final db = await database;
+    return db.rawQuery(sql, args);
+  }
+
+  Future<int> update(
+    String table,
+    Map<String, dynamic> row,
+    String where,
+    List<dynamic> whereArgs,
+  ) async {
+    final db = await database;
+    return db.update(table, row, where: where, whereArgs: whereArgs);
+  }
+
+  Future<int> delete(
+    String table,
+    String where,
+    List<dynamic> whereArgs,
+  ) async {
+    final db = await database;
+    return db.delete(table, where: where, whereArgs: whereArgs);
+  }
+
+  Future<T> transaction<T>(Future<T> Function(Transaction txn) action) async {
+    final db = await database;
+    return db.transaction(action);
+  }
+}

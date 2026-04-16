@@ -1,0 +1,376 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../models/billing/bill.dart';
+import '../../models/billing/referral_doctor.dart';
+import '../../models/billing/scan_type.dart';
+import '../../services/billing_service.dart';
+import '../../services/mwl_service.dart';
+import '../../utils/currency_formatter.dart';
+import 'receipt_preview_screen.dart';
+
+class NewBillScreen extends StatefulWidget {
+  const NewBillScreen({super.key});
+
+  @override
+  State<NewBillScreen> createState() => _NewBillScreenState();
+}
+
+class _NewBillScreenState extends State<NewBillScreen> {
+  final _formKey = GlobalKey<FormState>();
+
+  // Patient controllers
+  final _patientName = TextEditingController();
+  final _patientId = TextEditingController();
+  final _patientDob = TextEditingController();
+  final _patientPhone = TextEditingController();
+  String _patientSex = 'F';
+
+  // Scan / billing
+  ScanType? _selectedScan;
+  ReferralDoctor? _selectedDoctor;
+  final _discount = TextEditingController(text: '0');
+  String _paymentMode = 'Cash';
+  final _notes = TextEditingController();
+
+  List<ScanType> _scanTypes = [];
+  List<ReferralDoctor> _doctors = [];
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+    _discount.addListener(() => setState(() {}));
+  }
+
+  Future<void> _loadData() async {
+    final service = context.read<BillingService>();
+    final scans = await service.getScanTypes(activeOnly: true);
+    final docs = await service.getReferralDoctors(activeOnly: true);
+    if (mounted) {
+      setState(() {
+        _scanTypes = scans;
+        _doctors = docs;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _patientName.dispose();
+    _patientId.dispose();
+    _patientDob.dispose();
+    _patientPhone.dispose();
+    _discount.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  double get _scanFee => _selectedScan?.price ?? 0;
+  double get _discountAmt => double.tryParse(_discount.text) ?? 0;
+  double get _finalAmount => (_scanFee - _discountAmt).clamp(0, double.infinity);
+
+  Future<void> _pickDob() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(1990),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      final formatted =
+          '${picked.year}${picked.month.toString().padLeft(2, '0')}${picked.day.toString().padLeft(2, '0')}';
+      _patientDob.text = formatted;
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedScan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a scan type')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+
+    try {
+      final billingService = context.read<BillingService>();
+      final mwlService = context.read<MwlService>();
+
+      final draftBill = Bill(
+        id: '',
+        patientName: _patientName.text.trim(),
+        patientId: _patientId.text.trim().isEmpty ? null : _patientId.text.trim(),
+        patientDob: _patientDob.text.trim().isEmpty ? null : _patientDob.text.trim(),
+        patientSex: _patientSex,
+        patientPhone: _patientPhone.text.trim().isEmpty ? null : _patientPhone.text.trim(),
+        scanTypeId: _selectedScan!.id,
+        referralDoctorId: _selectedDoctor?.id,
+        scanFee: _scanFee,
+        discount: _discountAmt,
+        finalAmount: _finalAmount,
+        paymentMode: _paymentMode,
+        createdAt: DateTime.now().toIso8601String(),
+      );
+
+      final savedBill = await billingService.createBill(draftBill);
+
+      // Best-effort MWL push
+      final mwlResult = await mwlService.pushToWorklist(
+        bill: savedBill,
+        scanType: _selectedScan!,
+        referralDoctor: _selectedDoctor,
+      );
+
+      if (mwlResult.success) {
+        await billingService.markWorklistPushed(savedBill.id);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bill saved. MWL push failed: ${mwlResult.error}'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ReceiptPreviewScreen(
+              bill: savedBill,
+              scanType: _selectedScan,
+              referralDoctor: _selectedDoctor,
+            ),
+          ),
+        );
+        _resetForm();
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _resetForm() {
+    _formKey.currentState?.reset();
+    _patientName.clear();
+    _patientId.clear();
+    _patientDob.clear();
+    _patientPhone.clear();
+    _discount.text = '0';
+    _notes.clear();
+    setState(() {
+      _selectedScan = null;
+      _selectedDoctor = null;
+      _patientSex = 'F';
+      _paymentMode = 'Cash';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('New Bill')),
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle('Patient Details'),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _patientName,
+                decoration: const InputDecoration(labelText: 'Patient Name *'),
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    v == null || v.trim().length < 2 ? 'Enter patient name' : null,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _patientId,
+                      decoration: const InputDecoration(labelText: 'Patient ID'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _patientPhone,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _patientDob,
+                      decoration: InputDecoration(
+                        labelText: 'Date of Birth',
+                        hintText: 'YYYYMMDD',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today_outlined),
+                          onPressed: _pickDob,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _patientSex,
+                      decoration: const InputDecoration(labelText: 'Sex'),
+                      items: const [
+                        DropdownMenuItem(value: 'F', child: Text('Female')),
+                        DropdownMenuItem(value: 'M', child: Text('Male')),
+                        DropdownMenuItem(value: 'O', child: Text('Other')),
+                      ],
+                      onChanged: (v) => setState(() => _patientSex = v ?? 'F'),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+              _sectionTitle('Scan Details'),
+              const SizedBox(height: 8),
+
+              DropdownButtonFormField<ScanType>(
+                value: _selectedScan,
+                decoration: const InputDecoration(labelText: 'Scan Type *'),
+                items: _scanTypes
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text('${s.name}  (${formatCurrency(s.price)})'),
+                        ))
+                    .toList(),
+                onChanged: (s) => setState(() {
+                  _selectedScan = s;
+                  _discount.text = '0';
+                }),
+                validator: (v) => v == null ? 'Select a scan type' : null,
+              ),
+              const SizedBox(height: 12),
+
+              DropdownButtonFormField<ReferralDoctor?>(
+                value: _selectedDoctor,
+                decoration: const InputDecoration(labelText: 'Referred By'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('(None)')),
+                  ..._doctors.map(
+                    (d) => DropdownMenuItem(value: d, child: Text('Dr. ${d.name}')),
+                  ),
+                ],
+                onChanged: (d) => setState(() => _selectedDoctor = d),
+              ),
+
+              const SizedBox(height: 20),
+              _sectionTitle('Payment'),
+              const SizedBox(height: 8),
+
+              TextFormField(
+                controller: _discount,
+                decoration: InputDecoration(
+                  labelText: 'Discount',
+                  prefixText: '₹ ',
+                  helperText: _selectedScan != null
+                      ? 'Scan fee: ${formatCurrency(_scanFee)}'
+                      : null,
+                ),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  final d = double.tryParse(v ?? '0') ?? 0;
+                  if (d < 0) return 'Cannot be negative';
+                  if (d > _scanFee) return 'Discount exceeds scan fee';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              Text('Payment Mode', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: ['Cash', 'UPI', 'Card', 'Credit'].map((mode) {
+                  return ChoiceChip(
+                    label: Text(mode),
+                    selected: _paymentMode == mode,
+                    onSelected: (_) => setState(() => _paymentMode = mode),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _notes,
+                decoration: const InputDecoration(labelText: 'Notes'),
+                maxLines: 2,
+              ),
+
+              const SizedBox(height: 20),
+              // Amount summary
+              if (_selectedScan != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Amount to Collect',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        formatCurrency(_finalAmount),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('Generate Bill & Push to MWL'),
+                  onPressed: _saving ? null : _submit,
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) => Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold),
+      );
+}
