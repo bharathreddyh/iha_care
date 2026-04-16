@@ -18,6 +18,23 @@ class NavigationShell extends StatefulWidget {
 
 class _NavigationShellState extends State<NavigationShell> {
   int _selectedIndex = 0;
+  final _newBillKey = GlobalKey<NewBillScreenState>();
+
+  late final List<Widget> _screens = [
+    const BillingDashboardScreen(),
+    NewBillScreen(key: _newBillKey),
+    const BillHistoryScreen(),
+    const ReferralDoctorsScreen(),
+    const ReportsScreen(),
+    const WorklistStatusScreen(),
+  ];
+
+  void _onTabSelected(int i) {
+    setState(() => _selectedIndex = i);
+    // Reload scan types & referral doctors whenever the user switches to
+    // the New Bill tab so newly-added entries show up immediately.
+    if (i == 1) _newBillKey.currentState?.refresh();
+  }
 
   static const _destinations = [
     NavigationRailDestination(
@@ -52,15 +69,6 @@ class _NavigationShellState extends State<NavigationShell> {
     ),
   ];
 
-  static const _screens = [
-    BillingDashboardScreen(),
-    NewBillScreen(),
-    BillHistoryScreen(),
-    ReferralDoctorsScreen(),
-    ReportsScreen(),
-    WorklistStatusScreen(),
-  ];
-
   // Extra screens accessible via AppBar navigation from main screens
   void _navigateTo(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -78,8 +86,7 @@ class _NavigationShellState extends State<NavigationShell> {
               children: [
                 NavigationRail(
                   selectedIndex: _selectedIndex,
-                  onDestinationSelected: (i) =>
-                      setState(() => _selectedIndex = i),
+                  onDestinationSelected: _onTabSelected,
                   extended: constraints.maxWidth > 1000,
                   destinations: _destinations,
                   trailing: Expanded(
@@ -128,7 +135,7 @@ class _NavigationShellState extends State<NavigationShell> {
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _selectedIndex,
-            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+            onDestinationSelected: _onTabSelected,
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),

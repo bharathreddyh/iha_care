@@ -13,10 +13,10 @@ class NewBillScreen extends StatefulWidget {
   const NewBillScreen({super.key});
 
   @override
-  State<NewBillScreen> createState() => _NewBillScreenState();
+  State<NewBillScreen> createState() => NewBillScreenState();
 }
 
-class _NewBillScreenState extends State<NewBillScreen> {
+class NewBillScreenState extends State<NewBillScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Patient controllers
@@ -59,6 +59,10 @@ class _NewBillScreenState extends State<NewBillScreen> {
       if (_patientId.text.isEmpty) _patientId.text = patientId;
     }
   }
+
+  /// Public hook so the navigation shell can refresh lists when this tab
+  /// becomes visible (e.g. after adding a new referral doctor).
+  Future<void> refresh() => _loadData();
 
   @override
   void dispose() {
@@ -202,7 +206,16 @@ class _NewBillScreenState extends State<NewBillScreen> {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('New Bill')),
+      appBar: AppBar(
+        title: const Text('New Bill'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Reload scan types & doctors',
+            onPressed: _loadData,
+          ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
