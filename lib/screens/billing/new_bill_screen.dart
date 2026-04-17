@@ -164,17 +164,19 @@ class NewBillScreenState extends State<NewBillScreen> {
       }
 
       if (mounted) {
+        final scanSnapshot = _selectedScan;
+        final doctorSnapshot = _selectedDoctor;
+        _resetForm();
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => ReceiptPreviewScreen(
               bill: savedBill,
-              scanType: _selectedScan,
-              referralDoctor: _selectedDoctor,
+              scanType: scanSnapshot,
+              referralDoctor: doctorSnapshot,
             ),
           ),
         );
-        _resetForm();
       }
     } finally {
       if (mounted) setState(() => _saving = false);
