@@ -37,6 +37,7 @@ class NewBillScreenState extends State<NewBillScreen> {
   List<ReferralDoctor> _doctors = [];
   bool _loading = true;
   bool _saving = false;
+  int _autocompleteResetKey = 0;
 
   @override
   void initState() {
@@ -200,6 +201,7 @@ class NewBillScreenState extends State<NewBillScreen> {
       _selectedDoctor = null;
       _patientSex = 'F';
       _paymentMode = 'Cash';
+      _autocompleteResetKey++;
     });
   }
 
@@ -297,6 +299,7 @@ class NewBillScreenState extends State<NewBillScreen> {
               const SizedBox(height: 8),
 
               Autocomplete<ScanType>(
+                key: ValueKey(_autocompleteResetKey),
                 initialValue: TextEditingValue(
                   text: _selectedScan == null
                       ? ''
