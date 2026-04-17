@@ -22,6 +22,8 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
   bool _loading = true;
   final _searchCtrl = TextEditingController();
   String _statusFilter = 'All';
+  DateTime? _fromDate;
+  DateTime? _toDate;
 
   @override
   void initState() {
@@ -37,10 +39,44 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
     super.dispose();
   }
 
+  void _setToday() {
+    final today = DateTime.now();
+    setState(() {
+      _fromDate = DateTime(today.year, today.month, today.day);
+      _toDate = _fromDate!.add(const Duration(days: 1));
+    });
+    _load();
+  }
+
+  void _clearDateFilter() {
+    setState(() { _fromDate = null; _toDate = null; });
+    _load();
+  }
+
+  Future<void> _pickDateRange() async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _fromDate != null && _toDate != null
+          ? DateTimeRange(start: _fromDate!, end: _toDate!)
+          : null,
+    );
+    if (range != null) {
+      setState(() {
+        _fromDate = range.start;
+        _toDate = range.end.add(const Duration(days: 1));
+      });
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     final bills = await context.read<BillingService>().getBills(
           searchTerm: _searchCtrl.text,
           statusFilter: _statusFilter,
+          fromDate: _fromDate,
+          toDate: _toDate,
         );
     if (mounted) setState(() { _bills = bills; _loading = false; });
   }
@@ -97,31 +133,65 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'Search patient or bill ID…',
-                      prefixIcon: Icon(Icons.search),
-                      isDense: true,
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'Search patient or bill ID…',
+                          prefixIcon: Icon(Icons.search),
+                          isDense: true,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                DropdownButton<String>(
-                  value: _statusFilter,
-                  items: const [
-                    DropdownMenuItem(value: 'All', child: Text('All')),
-                    DropdownMenuItem(value: 'Paid', child: Text('Paid')),
-                    DropdownMenuItem(value: 'Pending', child: Text('Pending')),
+                    const SizedBox(width: 8),
+                    DropdownButton<String>(
+                      value: _statusFilter,
+                      items: const [
+                        DropdownMenuItem(value: 'All', child: Text('All')),
+                        DropdownMenuItem(value: 'Paid', child: Text('Paid')),
+                        DropdownMenuItem(value: 'Pending', child: Text('Pending')),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _statusFilter = v ?? 'All';
+                        _load();
+                      }),
+                    ),
                   ],
-                  onChanged: (v) => setState(() {
-                    _statusFilter = v ?? 'All';
-                    _load();
-                  }),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    FilledButton.tonal(
+                      onPressed: _setToday,
+                      style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact),
+                      child: const Text('Today'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: _pickDateRange,
+                      icon: const Icon(Icons.date_range, size: 16),
+                      label: Text(_fromDate == null
+                          ? 'Date Range'
+                          : '${_fromDate!.day}/${_fromDate!.month} – ${_toDate!.subtract(const Duration(days: 1)).day}/${_toDate!.subtract(const Duration(days: 1)).month}'),
+                      style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact),
+                    ),
+                    if (_fromDate != null) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.clear, size: 16),
+                        onPressed: _clearDateFilter,
+                        tooltip: 'Clear date filter',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

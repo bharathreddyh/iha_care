@@ -199,11 +199,28 @@ class BillingService {
   }
 
   Future<void> markScanCompleted(String billId) async {
-    await _db.update('bills', {'scan_completed': 1}, 'id = ?', [billId]);
+    await _db.update('bills', {'scan_completed': 1, 'synced': 0}, 'id = ?', [billId]);
+  }
+
+  Future<void> markReportCreated(String billId, {bool value = true}) async {
+    await _db.update('bills', {'report_created': value ? 1 : 0, 'synced': 0}, 'id = ?', [billId]);
+  }
+
+  Future<void> markDispatched(String billId, {bool value = true}) async {
+    await _db.update('bills', {'dispatched': value ? 1 : 0, 'synced': 0}, 'id = ?', [billId]);
+  }
+
+  Future<void> updateAmountPaid(String billId, double amountPaid, double finalAmount) async {
+    final status = amountPaid >= finalAmount ? 'paid' : 'pending';
+    await _db.update('bills', {
+      'amount_paid': amountPaid,
+      'status': status,
+      'synced': 0,
+    }, 'id = ?', [billId]);
   }
 
   Future<void> updateBillStatus(String billId, String status) async {
-    await _db.update('bills', {'status': status}, 'id = ?', [billId]);
+    await _db.update('bills', {'status': status, 'synced': 0}, 'id = ?', [billId]);
   }
 
   // ── Dashboard Stats ───────────────────────────────────────────────────────

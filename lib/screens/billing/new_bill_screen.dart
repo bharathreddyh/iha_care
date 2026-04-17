@@ -30,6 +30,7 @@ class NewBillScreenState extends State<NewBillScreen> {
   ScanType? _selectedScan;
   ReferralDoctor? _selectedDoctor;
   final _discount = TextEditingController(text: '0');
+  final _amountPaid = TextEditingController();
   String _paymentMode = 'Cash';
   final _notes = TextEditingController();
 
@@ -43,7 +44,13 @@ class NewBillScreenState extends State<NewBillScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _discount.addListener(() => setState(() {}));
+    _discount.addListener(() {
+      setState(() {});
+      // Auto-fill amount paid with new total if user hasn't edited it
+      if (_amountPaid.text.isEmpty) {
+        _amountPaid.text = _finalAmount.toStringAsFixed(0);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -72,6 +79,7 @@ class NewBillScreenState extends State<NewBillScreen> {
     _patientDob.dispose();
     _patientPhone.dispose();
     _discount.dispose();
+    _amountPaid.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -139,7 +147,11 @@ class NewBillScreenState extends State<NewBillScreen> {
         scanFee: _scanFee,
         discount: _discountAmt,
         finalAmount: _finalAmount,
+        amountPaid: double.tryParse(_amountPaid.text) ?? _finalAmount,
         paymentMode: _paymentMode,
+        status: (double.tryParse(_amountPaid.text) ?? _finalAmount) >= _finalAmount
+            ? 'paid'
+            : 'pending',
         createdAt: DateTime.now().toIso8601String(),
       );
 
@@ -191,6 +203,7 @@ class NewBillScreenState extends State<NewBillScreen> {
     _patientDob.clear();
     _patientPhone.clear();
     _discount.text = '0';
+    _amountPaid.clear();
     _notes.clear();
     // Regenerate patient ID for next patient
     context.read<BillingService>().generatePatientId().then((id) {
@@ -319,6 +332,7 @@ class NewBillScreenState extends State<NewBillScreen> {
                 onSelected: (s) => setState(() {
                   _selectedScan = s;
                   _discount.text = '0';
+                  _amountPaid.text = s.price.toStringAsFixed(0);
                 }),
                 fieldViewBuilder:
                     (ctx, controller, focusNode, onFieldSubmitted) {
@@ -429,27 +443,70 @@ class NewBillScreenState extends State<NewBillScreen> {
               ),
 
               const SizedBox(height: 20),
-              // Amount summary
+              // Amount summary + partial payment
               if (_selectedScan != null) ...[
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
                     children: [
-                      const Text('Amount to Collect',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text(
-                        formatCurrency(_finalAmount),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            formatCurrency(_finalAmount),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text('Amount Paid  ',
+                              style: TextStyle(fontSize: 13)),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _amountPaid,
+                              decoration: InputDecoration(
+                                prefixText: '₹ ',
+                                isDense: true,
+                                hintText: _finalAmount.toStringAsFixed(0),
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (() {
+                        final paid = double.tryParse(_amountPaid.text) ?? _finalAmount;
+                        return paid < _finalAmount;
+                      }()) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Pending',
+                                style: TextStyle(color: Colors.orange)),
+                            Text(
+                              formatCurrency(_finalAmount -
+                                  (double.tryParse(_amountPaid.text) ?? _finalAmount)),
+                              style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

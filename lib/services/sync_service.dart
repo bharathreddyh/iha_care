@@ -100,6 +100,8 @@ class SyncService extends ChangeNotifier {
       r['centre_id'] = centreId;
       r['worklist_pushed'] = r['worklist_pushed'] == 1;
       r['scan_completed'] = r['scan_completed'] == 1;
+      r['report_created'] = r['report_created'] == 1;
+      r['dispatched'] = r['dispatched'] == 1;
       r.remove('synced');
       return r;
     }).toList();
@@ -251,6 +253,8 @@ class SyncService extends ChangeNotifier {
     final r = Map<String, dynamic>.from(row);
     r['worklist_pushed'] = r['worklist_pushed'] == true ? 1 : 0;
     r['scan_completed'] = r['scan_completed'] == true ? 1 : 0;
+    r['report_created'] = r['report_created'] == true ? 1 : 0;
+    r['dispatched'] = r['dispatched'] == true ? 1 : 0;
     r['synced'] = 1;
     r.remove('centre_id');
     r.remove('updated_at');
