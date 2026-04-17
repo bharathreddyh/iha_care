@@ -2,6 +2,33 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+class DicomMeasurement {
+  final String name;
+  final dynamic value; // double or String
+  final String unit;
+
+  const DicomMeasurement(
+      {required this.name, required this.value, required this.unit});
+
+  factory DicomMeasurement.fromMap(Map<String, dynamic> m) {
+    return DicomMeasurement(
+      name: m['name'] as String? ?? '',
+      value: m['value'],
+      unit: m['unit'] as String? ?? '',
+    );
+  }
+
+  String get displayValue {
+    if (value is num) {
+      final d = (value as num).toDouble();
+      return d == d.truncateToDouble()
+          ? d.toStringAsFixed(0)
+          : d.toStringAsFixed(2);
+    }
+    return value?.toString() ?? '';
+  }
+}
+
 class OrthancService {
   static const _baseUrl = 'http://127.0.0.1:8042';
   static const _timeout = Duration(seconds: 5);
@@ -97,6 +124,29 @@ class OrthancService {
     final studyId = await getStudyIdByAccession(accessionNumber);
     if (studyId == null) return [];
     return getInstanceIds(studyId);
+  }
+
+  // ── Measurements (DICOM SR via FastAPI helper) ────────────────────────────
+
+  static const _mwlBaseUrl = 'http://127.0.0.1:8000';
+
+  /// Fetches OB/GYN measurements parsed from DICOM SR by the FastAPI helper.
+  /// Returns an empty list if the helper is unreachable or no SR found.
+  Future<List<DicomMeasurement>> getMeasurements(String accessionNumber) async {
+    try {
+      final res = await _client
+          .get(Uri.parse('$_mwlBaseUrl/measurements/$accessionNumber'))
+          .timeout(_timeout);
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final items = (body['measurements'] as List<dynamic>? ?? []);
+        return items
+            .cast<Map<String, dynamic>>()
+            .map(DicomMeasurement.fromMap)
+            .toList();
+      }
+    } catch (_) {}
+    return [];
   }
 
   Future<List<Map<String, dynamic>>> getRecentStudies() async {
