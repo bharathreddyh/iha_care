@@ -1,0 +1,159 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+
+import '../models/auth/app_centre.dart';
+
+class AuthService extends ChangeNotifier {
+  static const _prefDeviceId = 'device_id';
+  static const _prefCentreId = 'centre_id';
+  static const _prefCentreName = 'centre_name';
+
+  final _client = Supabase.instance.client;
+
+  String? _centreId;
+  String? _centreName;
+  String? _deviceId;
+  int _activeDeviceCount = 0;
+  Timer? _heartbeatTimer;
+
+  String? get centreId => _centreId;
+  String? get centreName => _centreName;
+  int get activeDeviceCount => _activeDeviceCount;
+  User? get currentUser => _client.auth.currentUser;
+  bool get isLoggedIn => _client.auth.currentUser != null && _centreId != null;
+
+  Future<void> initialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    _centreId = prefs.getString(_prefCentreId);
+    _centreName = prefs.getString(_prefCentreName);
+    _deviceId = prefs.getString(_prefDeviceId);
+    if (_deviceId == null) {
+      _deviceId = const Uuid().v4();
+      await prefs.setString(_prefDeviceId, _deviceId!);
+    }
+    if (isLoggedIn) {
+      _startHeartbeat();
+    }
+    notifyListeners();
+  }
+
+  Future<List<AppCentre>> signIn(String email, String password) async {
+    await _client.auth.signInWithPassword(email: email, password: password);
+    return _fetchCentres();
+  }
+
+  Future<List<AppCentre>> _fetchCentres() async {
+    final response = await _client
+        .from('centre_members')
+        .select('role, centres(id, name, code)');
+    return response.map<AppCentre>((row) {
+      final c = row['centres'] as Map<String, dynamic>;
+      return AppCentre(
+        id: c['id'] as String,
+        name: c['name'] as String,
+        code: c['code'] as String,
+        role: row['role'] as String,
+      );
+    }).toList();
+  }
+
+  Future<void> selectCentre(AppCentre centre) async {
+    final prefs = await SharedPreferences.getInstance();
+    _centreId = centre.id;
+    _centreName = centre.name;
+    await prefs.setString(_prefCentreId, centre.id);
+    await prefs.setString(_prefCentreName, centre.name);
+    await _registerDeviceSession();
+    _startHeartbeat();
+    notifyListeners();
+  }
+
+  Future<void> _registerDeviceSession() async {
+    if (_centreId == null || _deviceId == null) return;
+    try {
+      await _client.from('device_sessions').upsert({
+        'id': _deviceId,
+        'user_id': _client.auth.currentUser!.id,
+        'centre_id': _centreId,
+        'device_name': _deviceName,
+        'last_seen': DateTime.now().toIso8601String(),
+        'is_active': true,
+      }, onConflict: 'id');
+      await _updateDeviceCount();
+    } catch (_) {}
+  }
+
+  String get _deviceName {
+    try {
+      return Platform.localHostname;
+    } catch (_) {
+      return 'Unknown PC';
+    }
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      await _sendHeartbeat();
+    });
+    _updateDeviceCount();
+  }
+
+  Future<void> _sendHeartbeat() async {
+    if (_deviceId == null) return;
+    try {
+      await _client.from('device_sessions').update({
+        'last_seen': DateTime.now().toIso8601String(),
+        'is_active': true,
+      }).eq('id', _deviceId!);
+      await _updateDeviceCount();
+    } catch (_) {}
+  }
+
+  Future<void> _updateDeviceCount() async {
+    if (_centreId == null) return;
+    try {
+      final cutoff = DateTime.now()
+          .subtract(const Duration(minutes: 10))
+          .toIso8601String();
+      final response = await _client
+          .from('device_sessions')
+          .select('id')
+          .eq('centre_id', _centreId!)
+          .eq('is_active', true)
+          .gte('last_seen', cutoff);
+      _activeDeviceCount = (response as List).length;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> signOut() async {
+    _heartbeatTimer?.cancel();
+    if (_deviceId != null) {
+      try {
+        await _client
+            .from('device_sessions')
+            .update({'is_active': false}).eq('id', _deviceId!);
+      } catch (_) {}
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefCentreId);
+    await prefs.remove(_prefCentreName);
+    _centreId = null;
+    _centreName = null;
+    _activeDeviceCount = 0;
+    await _client.auth.signOut();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _heartbeatTimer?.cancel();
+    super.dispose();
+  }
+}

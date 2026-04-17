@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -34,7 +34,8 @@ class DatabaseHelper {
         price REAL NOT NULL,
         category TEXT NOT NULL,
         modality TEXT NOT NULL DEFAULT 'US',
-        is_active INTEGER NOT NULL DEFAULT 1
+        is_active INTEGER NOT NULL DEFAULT 1,
+        synced INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -47,7 +48,8 @@ class DatabaseHelper {
         specialty TEXT,
         incentive_type TEXT NOT NULL DEFAULT 'flat',
         incentive_value REAL NOT NULL DEFAULT 0,
-        is_active INTEGER NOT NULL DEFAULT 1
+        is_active INTEGER NOT NULL DEFAULT 1,
+        synced INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -70,7 +72,8 @@ class DatabaseHelper {
         worklist_pushed INTEGER NOT NULL DEFAULT 0,
         scan_completed INTEGER NOT NULL DEFAULT 0,
         notes TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        synced INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -95,7 +98,8 @@ class DatabaseHelper {
         total_billed REAL NOT NULL DEFAULT 0,
         incentive_amount REAL NOT NULL DEFAULT 0,
         payment_status TEXT NOT NULL DEFAULT 'unpaid',
-        paid_date TEXT
+        paid_date TEXT,
+        synced INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -105,6 +109,7 @@ class DatabaseHelper {
         doctor_id TEXT NOT NULL,
         scan_type_id TEXT NOT NULL,
         rate REAL NOT NULL DEFAULT 0,
+        synced INTEGER NOT NULL DEFAULT 0,
         UNIQUE(doctor_id, scan_type_id)
       )
     ''');
@@ -124,6 +129,21 @@ class DatabaseHelper {
           UNIQUE(doctor_id, scan_type_id)
         )
       ''');
+    }
+    if (oldVersion < 3) {
+      const tables = [
+        'bills',
+        'scan_types',
+        'referral_doctors',
+        'doctor_scan_incentives',
+        'incentive_ledger',
+      ];
+      for (final t in tables) {
+        try {
+          await db.execute(
+              'ALTER TABLE $t ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+      }
     }
   }
 

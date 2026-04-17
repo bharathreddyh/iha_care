@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../screens/billing/billing_dashboard_screen.dart';
 import '../screens/billing/bill_history_screen.dart';
@@ -8,6 +9,8 @@ import '../screens/billing/referral_doctors_screen.dart';
 import '../screens/billing/reports_screen.dart';
 import '../screens/billing/scan_types_screen.dart';
 import '../screens/billing/worklist_status_screen.dart';
+import '../services/auth_service.dart';
+import '../services/sync_service.dart';
 
 class NavigationShell extends StatefulWidget {
   const NavigationShell({super.key});
@@ -31,8 +34,6 @@ class _NavigationShellState extends State<NavigationShell> {
 
   void _onTabSelected(int i) {
     setState(() => _selectedIndex = i);
-    // Reload scan types & referral doctors whenever the user switches to
-    // the New Bill tab so newly-added entries show up immediately.
     if (i == 1) _newBillKey.currentState?.refresh();
   }
 
@@ -69,9 +70,29 @@ class _NavigationShellState extends State<NavigationShell> {
     ),
   ];
 
-  // Extra screens accessible via AppBar navigation from main screens
   void _navigateTo(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  }
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign Out?'),
+        content: const Text('You will need to sign in again to continue.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Sign Out')),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await context.read<AuthService>().signOut();
+    }
   }
 
   @override
@@ -97,6 +118,10 @@ class _NavigationShellState extends State<NavigationShell> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            _SyncIndicator(),
+                            const SizedBox(height: 4),
+                            _CentreLabel(),
+                            const SizedBox(height: 8),
                             IconButton(
                               icon: const Icon(Icons.category_outlined),
                               tooltip: 'Scan Types',
@@ -108,6 +133,11 @@ class _NavigationShellState extends State<NavigationShell> {
                               tooltip: 'Incentive Report',
                               onPressed: () => _navigateTo(
                                   context, const IncentiveReportScreen()),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.logout),
+                              tooltip: 'Sign Out',
+                              onPressed: () => _confirmSignOut(context),
                             ),
                           ],
                         ),
@@ -127,8 +157,18 @@ class _NavigationShellState extends State<NavigationShell> {
           );
         }
 
-        // Narrow (mobile/small window) layout
         return Scaffold(
+          appBar: AppBar(
+            title: _CentreLabel(),
+            actions: [
+              _SyncIndicator(),
+              IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: 'Sign Out',
+                onPressed: () => _confirmSignOut(context),
+              ),
+            ],
+          ),
           body: IndexedStack(
             index: _selectedIndex,
             children: _screens,
@@ -166,6 +206,101 @@ class _NavigationShellState extends State<NavigationShell> {
           ),
         );
       },
+    );
+  }
+}
+
+class _SyncIndicator extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final sync = context.watch<SyncService>();
+    final auth = context.watch<AuthService>();
+
+    Widget icon;
+    String tooltip;
+
+    switch (sync.status) {
+      case SyncStatus.syncing:
+        icon = const SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        );
+        tooltip = 'Syncing…';
+      case SyncStatus.offline:
+        icon = const Icon(Icons.cloud_off_outlined, size: 20);
+        tooltip = 'Offline — changes saved locally';
+      case SyncStatus.error:
+        icon = const Icon(Icons.sync_problem_outlined,
+            size: 20, color: Colors.orange);
+        tooltip = 'Sync error: ${sync.lastError ?? ''}';
+      case SyncStatus.idle:
+        icon = const Icon(Icons.cloud_done_outlined, size: 20);
+        final t = sync.lastSync;
+        tooltip = t != null
+            ? 'Synced ${_timeAgo(t)}'
+            : 'Cloud sync active';
+    }
+
+    final deviceCount = auth.activeDeviceCount;
+    return Tooltip(
+      message: '$tooltip'
+          '${deviceCount > 1 ? '\n$deviceCount devices active' : ''}',
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          IconButton(
+            icon: icon,
+            onPressed: sync.status == SyncStatus.syncing
+                ? null
+                : () => sync.syncAll(),
+          ),
+          if (deviceCount > 1)
+            Positioned(
+              right: 4,
+              top: 4,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+                constraints:
+                    const BoxConstraints(minWidth: 14, minHeight: 14),
+                child: Text(
+                  '$deviceCount',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
+}
+
+class _CentreLabel extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final name = context.watch<AuthService>().centreName;
+    if (name == null) return const SizedBox.shrink();
+    return Text(
+      name,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: Theme.of(context).colorScheme.outline,
+          ),
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
