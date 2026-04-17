@@ -1,3 +1,5 @@
+import 'incentive_scan_breakdown.dart';
+
 class IncentiveRecord {
   final String id;
   final String referralDoctorId;
@@ -7,6 +9,8 @@ class IncentiveRecord {
   final double incentiveAmount;
   final String paymentStatus; // unpaid | paid
   final String? paidDate;
+  // In-memory only — not persisted to incentive_ledger
+  final List<IncentiveScanBreakdown> breakdown;
 
   const IncentiveRecord({
     required this.id,
@@ -17,6 +21,7 @@ class IncentiveRecord {
     required this.incentiveAmount,
     this.paymentStatus = 'unpaid',
     this.paidDate,
+    this.breakdown = const [],
   });
 
   factory IncentiveRecord.fromMap(Map<String, dynamic> m) => IncentiveRecord(
@@ -50,6 +55,7 @@ class IncentiveRecord {
     double? incentiveAmount,
     String? paymentStatus,
     String? paidDate,
+    List<IncentiveScanBreakdown>? breakdown,
   }) =>
       IncentiveRecord(
         id: id ?? this.id,
@@ -60,5 +66,6 @@ class IncentiveRecord {
         incentiveAmount: incentiveAmount ?? this.incentiveAmount,
         paymentStatus: paymentStatus ?? this.paymentStatus,
         paidDate: paidDate ?? this.paidDate,
+        breakdown: breakdown ?? this.breakdown,
       );
 }

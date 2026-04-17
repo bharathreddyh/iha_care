@@ -67,10 +67,15 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Mark All Paid?'),
-        content: Text('Mark all incentives for ${formatMonthYear(_monthKey)} as paid?'),
+        content: Text(
+            'Mark all incentives for ${formatMonthYear(_monthKey)} as paid?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirm')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirm')),
         ],
       ),
     );
@@ -87,9 +92,12 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final totalReferrals = _records.fold<int>(0, (s, r) => s + r.referralCount);
-    final totalBilled = _records.fold<double>(0, (s, r) => s + r.totalBilled);
-    final totalIncentive = _records.fold<double>(0, (s, r) => s + r.incentiveAmount);
+    final totalReferrals =
+        _records.fold<int>(0, (s, r) => s + r.referralCount);
+    final totalBilled =
+        _records.fold<double>(0, (s, r) => s + r.totalBilled);
+    final totalIncentive =
+        _records.fold<double>(0, (s, r) => s + r.incentiveAmount);
 
     return Scaffold(
       appBar: AppBar(
@@ -98,7 +106,10 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
           if (_exporting)
             const Padding(
               padding: EdgeInsets.all(16),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else
             IconButton(
@@ -121,7 +132,8 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('Month: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                const Text('Month: ',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(width: 8),
                 DropdownButton<int>(
                   value: _selectedMonth,
@@ -129,13 +141,14 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                     12,
                     (i) => DropdownMenuItem(
                       value: i + 1,
-                      child: Text(
-                        ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i],
-                      ),
+                      child: Text([
+                        'Jan','Feb','Mar','Apr','May','Jun',
+                        'Jul','Aug','Sep','Oct','Nov','Dec'
+                      ][i]),
                     ),
                   ),
                   onChanged: (v) {
-                    if (v != null) setState(() { _selectedMonth = v; });
+                    if (v != null) setState(() => _selectedMonth = v);
                     _calculate();
                   },
                 ),
@@ -150,7 +163,7 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                     ),
                   ),
                   onChanged: (v) {
-                    if (v != null) setState(() { _selectedYear = v; });
+                    if (v != null) setState(() => _selectedYear = v);
                     _calculate();
                   },
                 ),
@@ -161,79 +174,179 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_records.isEmpty)
-            const Expanded(child: Center(child: Text('No referral data for this month.')))
+            const Expanded(
+                child: Center(child: Text('No referral data for this month.')))
           else
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  child: DataTable(
-                    columnSpacing: 20,
-                    columns: const [
-                      DataColumn(label: Text('Doctor')),
-                      DataColumn(label: Text('Clinic')),
-                      DataColumn(label: Text('Referrals'), numeric: true),
-                      DataColumn(label: Text('Billed'), numeric: true),
-                      DataColumn(label: Text('Incentive'), numeric: true),
-                      DataColumn(label: Text('Status')),
-                    ],
-                    rows: [
-                      ..._records.map((r) {
-                        final doc = _doctors[r.referralDoctorId];
-                        return DataRow(cells: [
-                          DataCell(Text(doc?.name ?? r.referralDoctorId)),
-                          DataCell(Text(doc?.clinicName ?? '-')),
-                          DataCell(Text(r.referralCount.toString())),
-                          DataCell(Text(formatCurrency(r.totalBilled))),
-                          DataCell(Text(formatCurrency(r.incentiveAmount))),
-                          DataCell(
-                            Chip(
-                              label: Text(
-                                r.paymentStatus == 'paid' ? 'Paid' : 'Unpaid',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: r.paymentStatus == 'paid'
-                                      ? Colors.green
-                                      : Colors.orange,
+              child: ListView.builder(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                itemCount: _records.length + 1,
+                itemBuilder: (ctx, index) {
+                  // Last item: totals summary card
+                  if (index == _records.length) {
+                    return Card(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
+                      margin: const EdgeInsets.only(top: 8, bottom: 24),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('TOTAL',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('$totalReferrals referrals'),
+                                Text(formatCurrency(totalBilled),
+                                    style: const TextStyle(fontSize: 12)),
+                                Text(
+                                  formatCurrency(totalIncentive),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16),
                                 ),
-                              ),
-                              side: BorderSide(
-                                color: r.paymentStatus == 'paid'
-                                    ? Colors.green
-                                    : Colors.orange,
-                              ),
-                              backgroundColor: Colors.transparent,
-                              padding: EdgeInsets.zero,
-                              visualDensity: VisualDensity.compact,
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  final r = _records[index];
+                  final doc = _doctors[r.referralDoctorId];
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ExpansionTile(
+                      tilePadding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(doc?.name ?? r.referralDoctorId,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                if (doc?.clinicName != null)
+                                  Text(doc!.clinicName!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall),
+                              ],
                             ),
                           ),
-                        ]);
-                      }),
-                      // Totals row
-                      DataRow(
-                        color: WidgetStateProperty.all(
-                            Theme.of(context).colorScheme.surfaceContainerHighest),
-                        cells: [
-                          const DataCell(Text('TOTAL',
-                              style: TextStyle(fontWeight: FontWeight.bold))),
-                          const DataCell(Text('')),
-                          DataCell(Text(totalReferrals.toString(),
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                          DataCell(Text(formatCurrency(totalBilled),
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                          DataCell(Text(formatCurrency(totalIncentive),
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                          const DataCell(Text('')),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                formatCurrency(r.incentiveAmount),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              Text('${r.referralCount} referral${r.referralCount == 1 ? '' : 's'}',
+                                  style: Theme.of(context).textTheme.bodySmall),
+                            ],
+                          ),
+                          const SizedBox(width: 8),
+                          _statusChip(context, r.paymentStatus),
                         ],
                       ),
-                    ],
-                  ),
-                ),
+                      children: [
+                        if (r.breakdown.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text(
+                              'No rate breakdown available.\nTap recalculate to see details.',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Table(
+                              columnWidths: const {
+                                0: FlexColumnWidth(3),
+                                1: FlexColumnWidth(1),
+                                2: FlexColumnWidth(2),
+                                3: FlexColumnWidth(2),
+                              },
+                              children: [
+                                TableRow(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                  ),
+                                  children: [
+                                    _cell('Scan', bold: true),
+                                    _cell('Count', bold: true),
+                                    _cell('Rate', bold: true),
+                                    _cell('Total', bold: true),
+                                  ],
+                                ),
+                                ...r.breakdown.map((b) => TableRow(children: [
+                                      _cell(b.scanTypeName),
+                                      _cell(b.count.toString()),
+                                      _cell(formatCurrency(b.rate)),
+                                      _cell(formatCurrency(b.total)),
+                                    ])),
+                              ],
+                            ),
+                          ),
+                        if (r.paymentStatus == 'unpaid')
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.check, size: 16),
+                              label: const Text('Mark Paid'),
+                              onPressed: () async {
+                                await context
+                                    .read<BillingService>()
+                                    .markIncentivePaid(r.id);
+                                _calculate();
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
         ],
       ),
     );
   }
+
+  Widget _statusChip(BuildContext context, String status) {
+    final isPaid = status == 'paid';
+    return Chip(
+      label: Text(
+        isPaid ? 'Paid' : 'Unpaid',
+        style: TextStyle(
+            fontSize: 11, color: isPaid ? Colors.green : Colors.orange),
+      ),
+      side: BorderSide(color: isPaid ? Colors.green : Colors.orange),
+      backgroundColor: Colors.transparent,
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _cell(String text, {bool bold = false}) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        child: Text(
+          text,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal),
+        ),
+      );
 }

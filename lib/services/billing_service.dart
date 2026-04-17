@@ -1,9 +1,12 @@
 import 'package:intl/intl.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/database_helper.dart';
 import '../models/billing/bill.dart';
+import '../models/billing/doctor_scan_incentive.dart';
 import '../models/billing/incentive_record.dart';
+import '../models/billing/incentive_scan_breakdown.dart';
 import '../models/billing/referral_doctor.dart';
 import '../models/billing/scan_type.dart';
 
@@ -78,6 +81,42 @@ class BillingService {
 
   Future<void> updateReferralDoctor(ReferralDoctor doc) async {
     await _db.update('referral_doctors', doc.toMap(), 'id = ?', [doc.id]);
+  }
+
+  // ── Doctor Scan Incentive Rates ───────────────────────────────────────────
+
+  /// Returns all per-scan rates for a doctor, keyed by scan_type_id.
+  Future<Map<String, DoctorScanIncentive>> getDoctorRates(String doctorId) async {
+    final rows = await _db.query(
+      'doctor_scan_incentives',
+      where: 'doctor_id = ?',
+      whereArgs: [doctorId],
+    );
+    return {
+      for (final r in rows.map(DoctorScanIncentive.fromMap)) r.scanTypeId: r,
+    };
+  }
+
+  /// Replaces all rates for a doctor atomically.
+  /// Only persists rows with rate > 0; zero means "no incentive".
+  Future<void> saveAllDoctorRates(
+      String doctorId, List<DoctorScanIncentive> rates) async {
+    await _db.transaction((txn) async {
+      await txn.delete(
+        'doctor_scan_incentives',
+        where: 'doctor_id = ?',
+        whereArgs: [doctorId],
+      );
+      for (final r in rates) {
+        if (r.rate > 0) {
+          await txn.insert(
+            'doctor_scan_incentives',
+            r.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+    });
   }
 
   // ── Bills ─────────────────────────────────────────────────────────────────
@@ -201,28 +240,81 @@ class BillingService {
   // ── Incentives ────────────────────────────────────────────────────────────
 
   Future<List<IncentiveRecord>> calculateMonthlyIncentives(String month) async {
-    final rows = await _db.rawQuery(
+    // Single-pass aggregation: per-doctor per-scan-type counts and billed amounts
+    final billRows = await _db.rawQuery(
       '''
-      SELECT referral_doctor_id,
-             COUNT(*) as referral_count,
-             SUM(final_amount) as total_billed
-      FROM bills
-      WHERE strftime('%Y-%m', created_at) = ?
-        AND referral_doctor_id IS NOT NULL
-      GROUP BY referral_doctor_id
+      SELECT b.referral_doctor_id,
+             b.scan_type_id,
+             s.name AS scan_type_name,
+             COUNT(*) AS cnt,
+             COALESCE(SUM(b.final_amount), 0) AS billed
+      FROM bills b
+      LEFT JOIN scan_types s ON s.id = b.scan_type_id
+      WHERE strftime('%Y-%m', b.created_at) = ?
+        AND b.referral_doctor_id IS NOT NULL
+      GROUP BY b.referral_doctor_id, b.scan_type_id
       ''',
       [month],
     );
 
+    if (billRows.isEmpty) return [];
+
+    // Load incentive rates for all involved doctors in one query
+    final doctorIds =
+        billRows.map((r) => r['referral_doctor_id'] as String).toSet().toList();
+    final placeholders = List.filled(doctorIds.length, '?').join(',');
+    final rateRows = await _db.rawQuery(
+      'SELECT doctor_id, scan_type_id, rate FROM doctor_scan_incentives WHERE doctor_id IN ($placeholders)',
+      doctorIds,
+    );
+
+    // rateMap[doctorId][scanTypeId] = rate
+    final rateMap = <String, Map<String, double>>{};
+    for (final row in rateRows) {
+      final did = row['doctor_id'] as String;
+      final sid = row['scan_type_id'] as String;
+      rateMap.putIfAbsent(did, () => {})[sid] =
+          (row['rate'] as num? ?? 0).toDouble();
+    }
+
+    // Group bill rows by doctor
+    final perDoctor = <String, List<Map<String, dynamic>>>{};
+    for (final row in billRows) {
+      perDoctor.putIfAbsent(row['referral_doctor_id'] as String, () => []).add(row);
+    }
+
     final records = <IncentiveRecord>[];
-    for (final row in rows) {
-      final docId = row['referral_doctor_id'] as String;
-      final doc = await getReferralDoctor(docId);
-      if (doc == null) continue;
 
-      final totalBilled = (row['total_billed'] as num? ?? 0).toDouble();
-      final incentiveAmount = doc.computeIncentive(totalBilled);
+    for (final entry in perDoctor.entries) {
+      final docId = entry.key;
+      final scanRows = entry.value;
 
+      final breakdown = <IncentiveScanBreakdown>[];
+      int totalCount = 0;
+      double totalBilled = 0;
+      double totalIncentive = 0;
+
+      for (final row in scanRows) {
+        final scanId = (row['scan_type_id'] as String?) ?? '__unknown__';
+        final scanName = (row['scan_type_name'] as String?) ?? 'Unknown';
+        final count = row['cnt'] as int? ?? 0;
+        final billed = (row['billed'] as num? ?? 0).toDouble();
+        final rate = rateMap[docId]?[scanId] ?? 0.0;
+
+        breakdown.add(IncentiveScanBreakdown(
+          scanTypeId: scanId,
+          scanTypeName: scanName,
+          count: count,
+          rate: rate,
+          total: count * rate,
+        ));
+
+        totalCount += count;
+        totalBilled += billed;
+        totalIncentive += count * rate;
+      }
+
+      // Preserve existing payment status
       final existing = await _db.query(
         'incentive_ledger',
         where: 'referral_doctor_id = ? AND month = ?',
@@ -233,18 +325,21 @@ class BillingService {
         id: existing.isEmpty ? _uuid.v4() : existing.first['id'] as String,
         referralDoctorId: docId,
         month: month,
-        referralCount: row['referral_count'] as int? ?? 0,
+        referralCount: totalCount,
         totalBilled: totalBilled,
-        incentiveAmount: incentiveAmount,
+        incentiveAmount: totalIncentive,
         paymentStatus: existing.isEmpty
             ? 'unpaid'
             : existing.first['payment_status'] as String? ?? 'unpaid',
-        paidDate: existing.isEmpty ? null : existing.first['paid_date'] as String?,
+        paidDate:
+            existing.isEmpty ? null : existing.first['paid_date'] as String?,
+        breakdown: breakdown,
       );
 
       await _db.insert('incentive_ledger', record.toMap());
       records.add(record);
     }
+
     return records;
   }
 

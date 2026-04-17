@@ -18,8 +18,9 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -98,8 +99,32 @@ class DatabaseHelper {
       )
     ''');
 
+    batch.execute('''
+      CREATE TABLE doctor_scan_incentives (
+        id TEXT PRIMARY KEY,
+        doctor_id TEXT NOT NULL,
+        scan_type_id TEXT NOT NULL,
+        rate REAL NOT NULL DEFAULT 0,
+        UNIQUE(doctor_id, scan_type_id)
+      )
+    ''');
+
     await batch.commit(noResult: true);
     await _seedScanTypes(db);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS doctor_scan_incentives (
+          id TEXT PRIMARY KEY,
+          doctor_id TEXT NOT NULL,
+          scan_type_id TEXT NOT NULL,
+          rate REAL NOT NULL DEFAULT 0,
+          UNIQUE(doctor_id, scan_type_id)
+        )
+      ''');
+    }
   }
 
   Future<void> _seedScanTypes(Database db) async {

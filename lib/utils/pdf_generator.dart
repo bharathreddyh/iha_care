@@ -146,16 +146,29 @@ Future<Uint8List> generateIncentiveReport(
                 4: const pw.FlexColumnWidth(2),
               },
               children: [
-                _tableHeader(['Doctor', 'Clinic', 'Referrals', 'Billed (₹)', 'Incentive (₹)']),
-                ...records.map((r) {
+                _tableHeader(['Doctor / Scan', 'Clinic', 'Referrals', 'Billed (₹)', 'Incentive (₹)']),
+                ...records.expand((r) {
                   final doc = doctors[r.referralDoctorId];
-                  return _tableRow([
-                    doc?.name ?? r.referralDoctorId,
-                    doc?.clinicName ?? '-',
-                    r.referralCount.toString(),
-                    formatCurrency(r.totalBilled),
-                    formatCurrency(r.incentiveAmount),
-                  ]);
+                  return [
+                    _tableRow([
+                      doc?.name ?? r.referralDoctorId,
+                      doc?.clinicName ?? '-',
+                      r.referralCount.toString(),
+                      formatCurrency(r.totalBilled),
+                      formatCurrency(r.incentiveAmount),
+                    ]),
+                    // Breakdown sub-rows, one per scan type
+                    ...r.breakdown.map((b) => _tableRow(
+                      [
+                        '  └ ${b.scanTypeName}',
+                        '',
+                        '${b.count} × ${formatCurrency(b.rate)}',
+                        '',
+                        formatCurrency(b.total),
+                      ],
+                      isBreakdown: true,
+                    )),
+                  ];
                 }),
                 _tableRow(
                   ['TOTAL', '', totalReferrals.toInt().toString(), formatCurrency(totalBilled), formatCurrency(totalIncentive)],
@@ -195,7 +208,12 @@ pw.TableRow _tableHeader(List<String> cells) => pw.TableRow(
           .toList(),
     );
 
-pw.TableRow _tableRow(List<String> cells, {bool bold = false}) => pw.TableRow(
+pw.TableRow _tableRow(List<String> cells,
+        {bool bold = false, bool isBreakdown = false}) =>
+    pw.TableRow(
+      decoration: isBreakdown
+          ? const pw.BoxDecoration(color: PdfColors.grey100)
+          : null,
       children: cells
           .map(
             (c) => pw.Padding(
@@ -203,8 +221,9 @@ pw.TableRow _tableRow(List<String> cells, {bool bold = false}) => pw.TableRow(
               child: pw.Text(
                 c,
                 style: pw.TextStyle(
-                  fontSize: 9,
+                  fontSize: isBreakdown ? 8 : 9,
                   fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  color: isBreakdown ? PdfColors.grey700 : PdfColors.black,
                 ),
               ),
             ),

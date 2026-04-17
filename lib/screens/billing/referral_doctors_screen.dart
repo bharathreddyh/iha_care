@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../models/billing/doctor_scan_incentive.dart';
 import '../../models/billing/referral_doctor.dart';
+import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
 
 class ReferralDoctorsScreen extends StatefulWidget {
@@ -28,18 +30,27 @@ class _ReferralDoctorsScreenState extends State<ReferralDoctorsScreen> {
   }
 
   Future<void> _openForm([ReferralDoctor? existing]) async {
+    final service = context.read<BillingService>();
+    final scanTypes = await service.getScanTypes(activeOnly: true);
+    final existingRates = existing != null
+        ? await service.getDoctorRates(existing.id)
+        : <String, DoctorScanIncentive>{};
+
+    if (!mounted) return;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => _DoctorForm(
         existing: existing,
-        onSave: (doc) async {
-          final service = context.read<BillingService>();
+        scanTypes: scanTypes,
+        existingRates: existingRates,
+        onSave: (doc, rates) async {
           if (existing == null) {
             await service.saveReferralDoctor(doc);
           } else {
             await service.updateReferralDoctor(doc);
           }
+          await service.saveAllDoctorRates(doc.id, rates);
           _load();
         },
       ),
@@ -63,13 +74,10 @@ class _ReferralDoctorsScreenState extends State<ReferralDoctorsScreen> {
                   itemCount: _doctors.length,
                   itemBuilder: (_, i) {
                     final doc = _doctors[i];
-                    final incentiveLabel = doc.incentiveType == 'percentage'
-                        ? '${doc.incentiveValue.toStringAsFixed(0)}%'
-                        : '₹${doc.incentiveValue.toStringAsFixed(0)}';
                     return ListTile(
                       leading: CircleAvatar(child: Text(doc.name[0].toUpperCase())),
                       title: Text(doc.name),
-                      subtitle: Text('${doc.clinicName ?? ''} · Incentive: $incentiveLabel'),
+                      subtitle: Text(doc.clinicName ?? ''),
                       trailing: doc.isActive
                           ? null
                           : const Chip(label: Text('Inactive')),
@@ -83,9 +91,16 @@ class _ReferralDoctorsScreenState extends State<ReferralDoctorsScreen> {
 
 class _DoctorForm extends StatefulWidget {
   final ReferralDoctor? existing;
-  final Future<void> Function(ReferralDoctor) onSave;
+  final List<ScanType> scanTypes;
+  final Map<String, DoctorScanIncentive> existingRates;
+  final Future<void> Function(ReferralDoctor, List<DoctorScanIncentive>) onSave;
 
-  const _DoctorForm({this.existing, required this.onSave});
+  const _DoctorForm({
+    this.existing,
+    required this.scanTypes,
+    required this.existingRates,
+    required this.onSave,
+  });
 
   @override
   State<_DoctorForm> createState() => _DoctorFormState();
@@ -97,8 +112,7 @@ class _DoctorFormState extends State<_DoctorForm> {
   late final TextEditingController _phone;
   late final TextEditingController _clinic;
   late final TextEditingController _specialty;
-  late final TextEditingController _incentiveValue;
-  String _incentiveType = 'flat';
+  late final Map<String, TextEditingController> _rateControllers;
   bool _isActive = true;
   bool _saving = false;
 
@@ -110,10 +124,17 @@ class _DoctorFormState extends State<_DoctorForm> {
     _phone = TextEditingController(text: d?.phone ?? '');
     _clinic = TextEditingController(text: d?.clinicName ?? '');
     _specialty = TextEditingController(text: d?.specialty ?? '');
-    _incentiveValue = TextEditingController(
-        text: d?.incentiveValue.toStringAsFixed(0) ?? '0');
-    _incentiveType = d?.incentiveType ?? 'flat';
     _isActive = d?.isActive ?? true;
+
+    _rateControllers = {
+      for (final st in widget.scanTypes)
+        st.id: TextEditingController(
+          text: () {
+            final rate = widget.existingRates[st.id]?.rate;
+            return (rate == null || rate == 0) ? '' : rate.toStringAsFixed(0);
+          }(),
+        ),
+    };
   }
 
   @override
@@ -122,29 +143,54 @@ class _DoctorFormState extends State<_DoctorForm> {
     _phone.dispose();
     _clinic.dispose();
     _specialty.dispose();
-    _incentiveValue.dispose();
+    for (final c in _rateControllers.values) c.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
+
+    final docId = widget.existing?.id ?? const Uuid().v4();
+
     final doc = ReferralDoctor(
-      id: widget.existing?.id ?? const Uuid().v4(),
+      id: docId,
       name: _name.text.trim(),
       phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
       clinicName: _clinic.text.trim().isEmpty ? null : _clinic.text.trim(),
       specialty: _specialty.text.trim().isEmpty ? null : _specialty.text.trim(),
-      incentiveType: _incentiveType,
-      incentiveValue: double.tryParse(_incentiveValue.text) ?? 0,
       isActive: _isActive,
     );
-    await widget.onSave(doc);
+
+    final rates = widget.scanTypes.map((st) {
+      final raw = _rateControllers[st.id]?.text.trim() ?? '';
+      final rate = double.tryParse(raw) ?? 0.0;
+      final existingId = widget.existingRates[st.id]?.id ?? const Uuid().v4();
+      return DoctorScanIncentive(
+        id: existingId,
+        doctorId: docId,
+        scanTypeId: st.id,
+        rate: rate,
+      );
+    }).toList();
+
+    await widget.onSave(doc, rates);
     if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
+    // Group scan types by category
+    final categories = <String>[];
+    final byCategory = <String, List<ScanType>>{};
+    for (final st in widget.scanTypes) {
+      if (!byCategory.containsKey(st.category)) {
+        categories.add(st.category);
+        byCategory[st.category] = [];
+      }
+      byCategory[st.category]!.add(st);
+    }
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -167,7 +213,9 @@ class _DoctorFormState extends State<_DoctorForm> {
               TextFormField(
                 controller: _name,
                 decoration: const InputDecoration(labelText: 'Doctor Name *'),
-                validator: (v) => v == null || v.trim().length < 2 ? 'Required' : null,
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    v == null || v.trim().length < 2 ? 'Required' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -191,27 +239,68 @@ class _DoctorFormState extends State<_DoctorForm> {
                 decoration: const InputDecoration(labelText: 'Specialty'),
               ),
               const SizedBox(height: 16),
-              Text('Incentive Type', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'flat', label: Text('Flat (₹)')),
-                  ButtonSegment(value: 'percentage', label: Text('Percentage (%)')),
-                ],
-                selected: {_incentiveType},
-                onSelectionChanged: (s) => setState(() => _incentiveType = s.first),
+
+              // Per-scan incentive rates
+              Text('Incentive Rates (₹ per referral)',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 2),
+              Text(
+                'Leave blank or 0 for no incentive on that scan.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _incentiveValue,
-                decoration: InputDecoration(
-                  labelText: 'Incentive Value',
-                  prefixText: _incentiveType == 'flat' ? '₹ ' : null,
-                  suffixText: _incentiveType == 'percentage' ? '%' : null,
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
+
+              ...categories.expand((cat) {
+                final scans = byCategory[cat]!;
+                return [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6, top: 4),
+                    child: Text(
+                      cat,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ),
+                  ...scans.map((st) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(st.name,
+                                  style: Theme.of(context).textTheme.bodyMedium),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 100,
+                              child: TextFormField(
+                                controller: _rateControllers[st.id],
+                                decoration: const InputDecoration(
+                                  prefixText: '₹ ',
+                                  hintText: '0',
+                                  isDense: true,
+                                ),
+                                keyboardType: TextInputType.number,
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) return null;
+                                  final d = double.tryParse(v.trim());
+                                  if (d == null || d < 0) return 'Invalid';
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                  const Divider(height: 16),
+                ];
+              }),
+
               SwitchListTile(
                 value: _isActive,
                 onChanged: (v) => setState(() => _isActive = v),
