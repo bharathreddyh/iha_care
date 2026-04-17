@@ -7,6 +7,7 @@ import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
+import 'patient_images_screen.dart';
 import 'receipt_preview_screen.dart';
 
 class BillHistoryScreen extends StatefulWidget {
@@ -68,6 +69,15 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                 scanType: scan,
                 referralDoctor: doc,
               ),
+            ),
+          );
+        },
+        onViewImages: () {
+          Navigator.pop(ctx);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PatientImagesScreen(bill: bill),
             ),
           );
         },
@@ -178,6 +188,7 @@ class _BillDetailDialog extends StatelessWidget {
   final ScanType? scanType;
   final ReferralDoctor? referralDoctor;
   final VoidCallback onViewReceipt;
+  final VoidCallback onViewImages;
   final VoidCallback onMarkCompleted;
 
   const _BillDetailDialog({
@@ -185,6 +196,7 @@ class _BillDetailDialog extends StatelessWidget {
     this.scanType,
     this.referralDoctor,
     required this.onViewReceipt,
+    required this.onViewImages,
     required this.onMarkCompleted,
   });
 
@@ -218,6 +230,11 @@ class _BillDetailDialog extends StatelessWidget {
             onPressed: onMarkCompleted,
             child: const Text('Mark Completed'),
           ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.photo_library_outlined),
+          label: const Text('View Images'),
+          onPressed: onViewImages,
+        ),
         FilledButton(
           onPressed: onViewReceipt,
           child: const Text('View Receipt'),

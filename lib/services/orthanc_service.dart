@@ -10,7 +10,28 @@ class OrthancService {
 
   OrthancService({http.Client? client}) : _client = client ?? http.Client();
 
+  // ── Connectivity ──────────────────────────────────────────────────────────
+
+  Future<bool> isReachable() async {
+    try {
+      final res = await _client
+          .get(Uri.parse('$_baseUrl/system'))
+          .timeout(_timeout);
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Study lookup ──────────────────────────────────────────────────────────
+
   Future<bool> isStudyCompleted(String accessionNumber) async {
+    final id = await getStudyIdByAccession(accessionNumber);
+    return id != null;
+  }
+
+  /// Returns the Orthanc study ID for the given accession number, or null.
+  Future<String?> getStudyIdByAccession(String accessionNumber) async {
     try {
       final res = await _client
           .post(
@@ -22,24 +43,60 @@ class OrthancService {
             }),
           )
           .timeout(_timeout);
-
       if (res.statusCode == 200) {
         final ids = jsonDecode(res.body) as List<dynamic>;
-        return ids.isNotEmpty;
+        return ids.isEmpty ? null : ids.first as String;
       }
     } catch (_) {}
-    return false;
+    return null;
   }
 
-  Future<bool> isReachable() async {
+  // ── Instance (image) retrieval ────────────────────────────────────────────
+
+  /// Returns all Orthanc instance IDs for every series in the study.
+  Future<List<String>> getInstanceIds(String studyId) async {
     try {
-      final res = await _client
-          .get(Uri.parse('$_baseUrl/system'))
+      final studyRes = await _client
+          .get(Uri.parse('$_baseUrl/studies/$studyId'))
           .timeout(_timeout);
-      return res.statusCode == 200;
+      if (studyRes.statusCode != 200) return [];
+
+      final study = jsonDecode(studyRes.body) as Map<String, dynamic>;
+      final seriesIds = (study['Series'] as List<dynamic>).cast<String>();
+
+      final instanceIds = <String>[];
+      for (final seriesId in seriesIds) {
+        final seriesRes = await _client
+            .get(Uri.parse('$_baseUrl/series/$seriesId/instances'))
+            .timeout(_timeout);
+        if (seriesRes.statusCode == 200) {
+          final instances = jsonDecode(seriesRes.body) as List<dynamic>;
+          for (final inst in instances) {
+            instanceIds.add((inst as Map<String, dynamic>)['ID'] as String);
+          }
+        }
+      }
+      return instanceIds;
     } catch (_) {
-      return false;
+      return [];
     }
+  }
+
+  /// JPEG preview URL for an instance (rendered by Orthanc).
+  String instancePreviewUrl(String instanceId) =>
+      '$_baseUrl/instances/$instanceId/preview';
+
+  /// Full JPEG download URL for an instance.
+  String instanceDownloadUrl(String instanceId) =>
+      '$_baseUrl/instances/$instanceId/rendered';
+
+  // ── Convenience ───────────────────────────────────────────────────────────
+
+  /// Fetches all instance IDs for the study matching [accessionNumber].
+  Future<List<String>> getInstancesForAccession(String accessionNumber) async {
+    final studyId = await getStudyIdByAccession(accessionNumber);
+    if (studyId == null) return [];
+    return getInstanceIds(studyId);
   }
 
   Future<List<Map<String, dynamic>>> getRecentStudies() async {
