@@ -20,6 +20,8 @@ class Bill {
   final bool dispatched;
   final String? notes;
   final String createdAt;
+  final String? cancelledAt;
+  final String? cancelReason;
 
   const Bill({
     required this.id,
@@ -43,12 +45,15 @@ class Bill {
     this.dispatched = false,
     this.notes,
     required this.createdAt,
+    this.cancelledAt,
+    this.cancelReason,
   }) : amountPaid = amountPaid ?? finalAmount;
 
   double get pendingAmount =>
       (finalAmount - amountPaid).clamp(0, double.infinity);
   bool get isFullyPaid => pendingAmount < 0.01;
   bool get isWorklistActive => worklistPushed && !scanCompleted;
+  bool get isCancelled => status == 'cancelled';
 
   factory Bill.fromMap(Map<String, dynamic> m) => Bill(
         id: m['id'] as String,
@@ -72,6 +77,8 @@ class Bill {
         dispatched: (m['dispatched'] as int? ?? 0) == 1,
         notes: m['notes'] as String?,
         createdAt: m['created_at'] as String,
+        cancelledAt: m['cancelled_at'] as String?,
+        cancelReason: m['cancel_reason'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -96,6 +103,8 @@ class Bill {
         'dispatched': dispatched ? 1 : 0,
         'notes': notes,
         'created_at': createdAt,
+        'cancelled_at': cancelledAt,
+        'cancel_reason': cancelReason,
       };
 
   Bill copyWith({
@@ -120,6 +129,8 @@ class Bill {
     bool? dispatched,
     String? notes,
     String? createdAt,
+    String? cancelledAt,
+    String? cancelReason,
   }) =>
       Bill(
         id: id ?? this.id,
@@ -143,5 +154,7 @@ class Bill {
         dispatched: dispatched ?? this.dispatched,
         notes: notes ?? this.notes,
         createdAt: createdAt ?? this.createdAt,
+        cancelledAt: cancelledAt ?? this.cancelledAt,
+        cancelReason: cancelReason ?? this.cancelReason,
       );
 }

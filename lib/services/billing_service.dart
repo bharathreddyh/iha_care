@@ -223,17 +223,60 @@ class BillingService {
     await _db.update('bills', {'status': status, 'synced': 0}, 'id = ?', [billId]);
   }
 
+  /// Soft-cancel a bill. Sets status='cancelled', amount_paid=0, records reason + timestamp.
+  /// Caller is responsible for reversing inventory and removing MWL.
+  Future<void> cancelBill(String billId, String reason) async {
+    await _db.update(
+      'bills',
+      {
+        'status': 'cancelled',
+        'amount_paid': 0,
+        'cancelled_at': DateTime.now().toIso8601String(),
+        'cancel_reason': reason,
+        'synced': 0,
+      },
+      'id = ?',
+      [billId],
+    );
+  }
+
+  /// Hard-delete a bill. Only allowed when created <5 min ago,
+  /// not pushed to MWL, no payment recorded, and not yet synced to cloud.
+  /// Returns true if deleted, false if guards reject.
+  Future<bool> deleteBillIfEligible(String billId) async {
+    final rows = await _db.query('bills', where: 'id = ?', whereArgs: [billId]);
+    if (rows.isEmpty) return false;
+    final row = rows.first;
+    final createdAt = DateTime.tryParse(row['created_at'] as String? ?? '');
+    if (createdAt == null) return false;
+    final ageMinutes = DateTime.now().difference(createdAt).inMinutes;
+    final worklistPushed = (row['worklist_pushed'] as int? ?? 0) == 1;
+    final amountPaid = (row['amount_paid'] as num? ?? 0).toDouble();
+    final synced = (row['synced'] as int? ?? 0) == 1;
+    if (ageMinutes > 5 || worklistPushed || amountPaid > 0 || synced) {
+      return false;
+    }
+    await _db.transaction((txn) async {
+      await txn.delete('inventory_transactions',
+          where: 'bill_id = ?', whereArgs: [billId]);
+      await txn.delete('pcpndt_form_f',
+          where: 'bill_id = ?', whereArgs: [billId]);
+      await txn.delete('bills', where: 'id = ?', whereArgs: [billId]);
+    });
+    return true;
+  }
+
   // ── Dashboard Stats ───────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getDashboardStats() async {
     final todayRows = await _db.rawQuery(
-      "SELECT COALESCE(SUM(final_amount), 0) as total FROM bills WHERE date(created_at) = date('now')",
+      "SELECT COALESCE(SUM(final_amount), 0) as total FROM bills WHERE date(created_at) = date('now') AND status != 'cancelled'",
     );
     final pendingRows = await _db.rawQuery(
-      "SELECT COUNT(*) as cnt FROM bills WHERE worklist_pushed = 1 AND scan_completed = 0",
+      "SELECT COUNT(*) as cnt FROM bills WHERE worklist_pushed = 1 AND scan_completed = 0 AND status != 'cancelled'",
     );
     final monthRows = await _db.rawQuery(
-      "SELECT COUNT(*) as cnt FROM bills WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')",
+      "SELECT COUNT(*) as cnt FROM bills WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') AND status != 'cancelled'",
     );
 
     return {
@@ -269,6 +312,7 @@ class BillingService {
       LEFT JOIN scan_types s ON s.id = b.scan_type_id
       WHERE strftime('%Y-%m', b.created_at) = ?
         AND b.referral_doctor_id IS NOT NULL
+        AND b.status != 'cancelled'
       GROUP BY b.referral_doctor_id, b.scan_type_id
       ''',
       [month],
@@ -387,6 +431,7 @@ class BillingService {
       FROM bills b
       LEFT JOIN scan_types s ON s.id = b.scan_type_id
       WHERE strftime('%Y-%m', b.created_at) = ?
+        AND b.status != 'cancelled'
       GROUP BY b.scan_type_id
       ORDER BY cnt DESC
       ''',
@@ -398,6 +443,7 @@ class BillingService {
       SELECT payment_mode, COUNT(*) as cnt, SUM(final_amount) as total
       FROM bills
       WHERE strftime('%Y-%m', created_at) = ?
+        AND status != 'cancelled'
       GROUP BY payment_mode
       ''',
       [month],

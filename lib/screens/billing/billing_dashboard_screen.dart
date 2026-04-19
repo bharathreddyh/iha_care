@@ -10,6 +10,7 @@ import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
+import '../../widgets/bill_actions.dart';
 import 'patient_images_screen.dart';
 import 'receipt_preview_screen.dart';
 
@@ -109,9 +110,10 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> {
     final pendingScans = _stats['pendingScans'] as int? ?? 0;
     final monthCount = _stats['monthBillCount'] as int? ?? 0;
 
-    final totalToday = _bills.fold(0.0, (s, b) => s + b.finalAmount);
-    final collectedToday = _bills.fold(0.0, (s, b) => s + b.amountPaid);
-    final pendingToday = _bills.fold(0.0, (s, b) => s + b.pendingAmount);
+    final activeBills = _bills.where((b) => !b.isCancelled);
+    final totalToday = activeBills.fold(0.0, (s, b) => s + b.finalAmount);
+    final collectedToday = activeBills.fold(0.0, (s, b) => s + b.amountPaid);
+    final pendingToday = activeBills.fold(0.0, (s, b) => s + b.pendingAmount);
 
     return Scaffold(
       appBar: AppBar(
@@ -299,6 +301,12 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> {
                           onReceipt: () => _openReceipt(_bills[i]),
                           onImages: () => _openImages(_bills[i]),
                           onPayment: () => _editPayment(_bills[i]),
+                          onCancel: () async {
+                            if (await cancelBillFlow(context, _bills[i])) _load();
+                          },
+                          onDelete: () async {
+                            if (await deleteBillFlow(context, _bills[i])) _load();
+                          },
                         ),
                       ),
           ),
@@ -410,6 +418,8 @@ class _PatientRow extends StatelessWidget {
   final VoidCallback onReceipt;
   final VoidCallback onImages;
   final VoidCallback onPayment;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
 
   const _PatientRow({
     required this.bill,
@@ -419,6 +429,8 @@ class _PatientRow extends StatelessWidget {
     required this.onReceipt,
     required this.onImages,
     required this.onPayment,
+    required this.onCancel,
+    required this.onDelete,
   });
 
   @override
@@ -436,9 +448,11 @@ class _PatientRow extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      color: bill.dispatched
-          ? theme.colorScheme.surfaceContainerLowest
-          : null,
+      color: bill.isCancelled
+          ? theme.colorScheme.errorContainer.withValues(alpha: 0.25)
+          : bill.dispatched
+              ? theme.colorScheme.surfaceContainerLowest
+              : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
@@ -461,11 +475,20 @@ class _PatientRow extends StatelessWidget {
                     bill.patientName,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      decoration: bill.dispatched
+                      decoration: (bill.dispatched || bill.isCancelled)
                           ? TextDecoration.lineThrough
+                          : null,
+                      color: bill.isCancelled
+                          ? theme.colorScheme.outline
                           : null,
                     ),
                   ),
+                  if (bill.isCancelled)
+                    Text(
+                      'Cancelled${bill.cancelReason != null ? ' — ${bill.cancelReason}' : ''}',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.error),
+                    ),
                   Row(
                     children: [
                       if (bill.patientId != null)
@@ -549,21 +572,21 @@ class _PatientRow extends StatelessWidget {
               Icons.image_outlined,
               bill.scanCompleted,
               Colors.purple,
-              () => onToggle(bill, 'scan_completed'),
+              bill.isCancelled ? null : () => onToggle(bill, 'scan_completed'),
               'Images received',
             ),
             _statusBtn(
               Icons.description_outlined,
               bill.reportCreated,
               Colors.teal,
-              () => onToggle(bill, 'report_created'),
+              bill.isCancelled ? null : () => onToggle(bill, 'report_created'),
               'Report done',
             ),
             _statusBtn(
               Icons.send_outlined,
               bill.dispatched,
               Colors.green,
-              () => onToggle(bill, 'dispatched'),
+              bill.isCancelled ? null : () => onToggle(bill, 'dispatched'),
               'Dispatched',
             ),
 
@@ -575,13 +598,29 @@ class _PatientRow extends StatelessWidget {
                     value: 'receipt', child: Text('View Receipt')),
                 const PopupMenuItem(
                     value: 'images', child: Text('View Images')),
-                const PopupMenuItem(
-                    value: 'payment', child: Text('Update Payment')),
+                if (!bill.isCancelled)
+                  const PopupMenuItem(
+                      value: 'payment', child: Text('Update Payment')),
+                if (!bill.isCancelled) const PopupMenuDivider(),
+                if (!bill.isCancelled)
+                  const PopupMenuItem(
+                    value: 'cancel',
+                    child: Text('Cancel Bill',
+                        style: TextStyle(color: Colors.red)),
+                  ),
+                if (canHardDelete(bill))
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete (recent only)',
+                        style: TextStyle(color: Colors.red)),
+                  ),
               ],
               onSelected: (v) {
                 if (v == 'receipt') onReceipt();
                 if (v == 'images') onImages();
                 if (v == 'payment') onPayment();
+                if (v == 'cancel') onCancel();
+                if (v == 'delete') onDelete();
               },
             ),
           ],

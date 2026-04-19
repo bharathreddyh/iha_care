@@ -125,6 +125,40 @@ class InventoryService {
     });
   }
 
+  /// Reverses a previous deduction for a bill. Finds 'usage' transactions for
+  /// this bill and inserts opposite 'reversal' transactions, adding quantities
+  /// back to stock. Safe to call even if no prior deduction exists.
+  Future<void> reverseForBill(String billId) async {
+    final rows = await _db.query(
+      'inventory_transactions',
+      where: 'bill_id = ? AND type = ?',
+      whereArgs: [billId, 'usage'],
+    );
+    if (rows.isEmpty) return;
+
+    final now = DateTime.now().toIso8601String();
+    await _db.transaction((txn) async {
+      for (final r in rows) {
+        final qty = (r['quantity'] as num).toDouble(); // negative
+        final itemId = r['item_id'] as String;
+        await txn.insert('inventory_transactions', {
+          'id': _uuid.v4(),
+          'item_id': itemId,
+          'type': 'reversal',
+          'quantity': -qty,
+          'bill_id': billId,
+          'notes': 'Bill cancelled',
+          'created_at': now,
+          'synced': 0,
+        });
+        await txn.rawUpdate(
+          'UPDATE inventory_items SET current_quantity = current_quantity + ?, synced = 0 WHERE id = ?',
+          [-qty, itemId],
+        );
+      }
+    });
+  }
+
   /// Called after a bill is created — deducts configured items for the scan type.
   Future<void> deductForBill(String billId, String scanTypeId) async {
     final usages = await getScanUsage(scanTypeId);

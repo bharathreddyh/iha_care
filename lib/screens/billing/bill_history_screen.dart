@@ -7,6 +7,7 @@ import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
+import '../../widgets/bill_actions.dart';
 import 'patient_images_screen.dart';
 import 'receipt_preview_screen.dart';
 
@@ -206,30 +207,94 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                         itemCount: _bills.length,
                         itemBuilder: (_, i) {
                           final bill = _bills[i];
+                          final cancelled = bill.isCancelled;
                           return ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: bill.status == 'paid'
-                                  ? Colors.green.shade100
-                                  : Colors.orange.shade100,
+                              backgroundColor: cancelled
+                                  ? Colors.red.shade100
+                                  : bill.status == 'paid'
+                                      ? Colors.green.shade100
+                                      : Colors.orange.shade100,
                               child: Icon(
-                                bill.status == 'paid' ? Icons.check : Icons.hourglass_empty,
-                                color: bill.status == 'paid'
-                                    ? Colors.green
-                                    : Colors.orange,
+                                cancelled
+                                    ? Icons.cancel
+                                    : bill.status == 'paid'
+                                        ? Icons.check
+                                        : Icons.hourglass_empty,
+                                color: cancelled
+                                    ? Colors.red
+                                    : bill.status == 'paid'
+                                        ? Colors.green
+                                        : Colors.orange,
                                 size: 20,
                               ),
                             ),
-                            title: Text(bill.patientName),
-                            subtitle: Text('${bill.id} · ${formatDate(bill.createdAt)}'),
+                            title: Text(
+                              bill.patientName,
+                              style: TextStyle(
+                                decoration: cancelled
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: cancelled ? Colors.grey : null,
+                              ),
+                            ),
+                            subtitle: Text(
+                              cancelled
+                                  ? '${bill.id} · ${formatDate(bill.createdAt)} · Cancelled${bill.cancelReason != null ? ' — ${bill.cancelReason}' : ''}'
+                                  : '${bill.id} · ${formatDate(bill.createdAt)}',
+                              style: cancelled
+                                  ? const TextStyle(color: Colors.red)
+                                  : null,
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
                                   formatCurrency(bill.finalAmount),
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    decoration: cancelled
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: cancelled ? Colors.grey : null,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 _worklistIcon(bill),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 18),
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(
+                                        value: 'open', child: Text('Open')),
+                                    if (!cancelled)
+                                      const PopupMenuItem(
+                                        value: 'cancel',
+                                        child: Text('Cancel Bill',
+                                            style:
+                                                TextStyle(color: Colors.red)),
+                                      ),
+                                    if (canHardDelete(bill))
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Delete (recent only)',
+                                            style:
+                                                TextStyle(color: Colors.red)),
+                                      ),
+                                  ],
+                                  onSelected: (v) async {
+                                    if (v == 'open') _openDetail(bill);
+                                    if (v == 'cancel') {
+                                      if (await cancelBillFlow(context, bill)) {
+                                        _load();
+                                      }
+                                    }
+                                    if (v == 'delete') {
+                                      if (await deleteBillFlow(context, bill)) {
+                                        _load();
+                                      }
+                                    }
+                                  },
+                                ),
                               ],
                             ),
                             onTap: () => _openDetail(bill),

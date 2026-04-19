@@ -218,3 +218,12 @@ CREATE POLICY inv_txn_centre ON inventory_transactions
 CREATE TRIGGER t_inv_items_upd BEFORE UPDATE ON inventory_items         FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER t_inv_usage_upd BEFORE UPDATE ON inventory_scan_usage    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER t_inv_txn_upd   BEFORE UPDATE ON inventory_transactions  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ── Migration: cancel support + later-added bill columns ──────────────────────
+-- Safe to re-run; uses IF NOT EXISTS.
+
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_paid    REAL;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS report_created BOOLEAN DEFAULT false;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS dispatched     BOOLEAN DEFAULT false;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at   TIMESTAMPTZ;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancel_reason  TEXT;

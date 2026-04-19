@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -76,6 +76,8 @@ class DatabaseHelper {
         report_created INTEGER NOT NULL DEFAULT 0,
         dispatched INTEGER NOT NULL DEFAULT 0,
         amount_paid REAL,
+        cancelled_at TEXT,
+        cancel_reason TEXT,
         synced INTEGER NOT NULL DEFAULT 0
       )
     ''');
@@ -215,6 +217,10 @@ class DatabaseHelper {
           )
         ''');
       } catch (_) {}
+    }
+    if (oldVersion < 6) {
+      try { await db.execute('ALTER TABLE bills ADD COLUMN cancelled_at TEXT'); } catch (_) {}
+      try { await db.execute('ALTER TABLE bills ADD COLUMN cancel_reason TEXT'); } catch (_) {}
     }
   }
 
