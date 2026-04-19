@@ -108,6 +108,7 @@ class SyncService extends ChangeNotifier {
       r['scan_completed'] = r['scan_completed'] == 1;
       r['report_created'] = r['report_created'] == 1;
       r['dispatched'] = r['dispatched'] == 1;
+      r['report_excluded'] = r['report_excluded'] == 1;
       r.remove('synced');
       return r;
     }).toList();
@@ -359,6 +360,7 @@ class SyncService extends ChangeNotifier {
     r['scan_completed'] = r['scan_completed'] == true ? 1 : 0;
     r['report_created'] = r['report_created'] == true ? 1 : 0;
     r['dispatched'] = r['dispatched'] == true ? 1 : 0;
+    r['report_excluded'] = r['report_excluded'] == true ? 1 : 0;
     r['synced'] = 1;
     r.remove('centre_id');
     r.remove('updated_at');

@@ -241,9 +241,13 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                             subtitle: Text(
                               cancelled
                                   ? '${bill.id} · ${formatDate(bill.createdAt)} · Cancelled${bill.cancelReason != null ? ' — ${bill.cancelReason}' : ''}'
-                                  : '${bill.id} · ${formatDate(bill.createdAt)}',
+                                  : bill.reportExcluded
+                                      ? '${bill.id} · ${formatDate(bill.createdAt)} · Excluded from report'
+                                      : '${bill.id} · ${formatDate(bill.createdAt)}',
                               style: cancelled
                                   ? const TextStyle(color: Colors.red)
+                                  : bill.reportExcluded
+                                      ? TextStyle(color: Colors.orange.shade700)
                                   : null,
                             ),
                             trailing: Row(
@@ -267,6 +271,13 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                                     const PopupMenuItem(
                                         value: 'open', child: Text('Open')),
                                     if (!cancelled)
+                                      PopupMenuItem(
+                                        value: 'exclude',
+                                        child: Text(bill.reportExcluded
+                                            ? 'Include in reports'
+                                            : 'Exclude from reports'),
+                                      ),
+                                    if (!cancelled)
                                       const PopupMenuItem(
                                         value: 'cancel',
                                         child: Text('Cancel Bill',
@@ -283,6 +294,10 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                                   ],
                                   onSelected: (v) async {
                                     if (v == 'open') _openDetail(bill);
+                                    if (v == 'exclude') {
+                                      await toggleReportExclusion(context, bill);
+                                      _load();
+                                    }
                                     if (v == 'cancel') {
                                       if (await cancelBillFlow(context, bill)) {
                                         _load();

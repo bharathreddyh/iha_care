@@ -22,6 +22,7 @@ class Bill {
   final String createdAt;
   final String? cancelledAt;
   final String? cancelReason;
+  final bool reportExcluded;
 
   const Bill({
     required this.id,
@@ -47,6 +48,7 @@ class Bill {
     required this.createdAt,
     this.cancelledAt,
     this.cancelReason,
+    this.reportExcluded = false,
   }) : amountPaid = amountPaid ?? finalAmount;
 
   double get pendingAmount =>
@@ -79,6 +81,7 @@ class Bill {
         createdAt: m['created_at'] as String,
         cancelledAt: m['cancelled_at'] as String?,
         cancelReason: m['cancel_reason'] as String?,
+        reportExcluded: (m['report_excluded'] as int? ?? 0) == 1,
       );
 
   Map<String, dynamic> toMap() => {
@@ -105,6 +108,7 @@ class Bill {
         'created_at': createdAt,
         'cancelled_at': cancelledAt,
         'cancel_reason': cancelReason,
+        'report_excluded': reportExcluded ? 1 : 0,
       };
 
   Bill copyWith({
@@ -131,6 +135,7 @@ class Bill {
     String? createdAt,
     String? cancelledAt,
     String? cancelReason,
+    bool? reportExcluded,
   }) =>
       Bill(
         id: id ?? this.id,
@@ -156,5 +161,6 @@ class Bill {
         createdAt: createdAt ?? this.createdAt,
         cancelledAt: cancelledAt ?? this.cancelledAt,
         cancelReason: cancelReason ?? this.cancelReason,
+        reportExcluded: reportExcluded ?? this.reportExcluded,
       );
 }

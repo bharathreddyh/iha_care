@@ -307,6 +307,10 @@ class _BillingDashboardScreenState extends State<BillingDashboardScreen> {
                           onDelete: () async {
                             if (await deleteBillFlow(context, _bills[i])) _load();
                           },
+                          onToggleExclusion: () async {
+                            await toggleReportExclusion(context, _bills[i]);
+                            _load();
+                          },
                         ),
                       ),
           ),
@@ -420,6 +424,7 @@ class _PatientRow extends StatelessWidget {
   final VoidCallback onPayment;
   final VoidCallback onCancel;
   final VoidCallback onDelete;
+  final VoidCallback onToggleExclusion;
 
   const _PatientRow({
     required this.bill,
@@ -431,6 +436,7 @@ class _PatientRow extends StatelessWidget {
     required this.onPayment,
     required this.onCancel,
     required this.onDelete,
+    required this.onToggleExclusion,
   });
 
   @override
@@ -488,6 +494,12 @@ class _PatientRow extends StatelessWidget {
                       'Cancelled${bill.cancelReason != null ? ' — ${bill.cancelReason}' : ''}',
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.colorScheme.error),
+                    ),
+                  if (bill.reportExcluded && !bill.isCancelled)
+                    Text(
+                      'Excluded from report',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: Colors.orange.shade700),
                     ),
                   Row(
                     children: [
@@ -601,6 +613,15 @@ class _PatientRow extends StatelessWidget {
                 if (!bill.isCancelled)
                   const PopupMenuItem(
                       value: 'payment', child: Text('Update Payment')),
+                if (!bill.isCancelled)
+                  PopupMenuItem(
+                    value: 'exclude',
+                    child: Text(
+                      bill.reportExcluded
+                          ? 'Include in reports'
+                          : 'Exclude from reports',
+                    ),
+                  ),
                 if (!bill.isCancelled) const PopupMenuDivider(),
                 if (!bill.isCancelled)
                   const PopupMenuItem(
@@ -619,6 +640,7 @@ class _PatientRow extends StatelessWidget {
                 if (v == 'receipt') onReceipt();
                 if (v == 'images') onImages();
                 if (v == 'payment') onPayment();
+                if (v == 'exclude') onToggleExclusion();
                 if (v == 'cancel') onCancel();
                 if (v == 'delete') onDelete();
               },

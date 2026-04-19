@@ -223,6 +223,15 @@ class BillingService {
     await _db.update('bills', {'status': status, 'synced': 0}, 'id = ?', [billId]);
   }
 
+  Future<void> toggleReportExclusion(String billId, {required bool exclude}) async {
+    await _db.update(
+      'bills',
+      {'report_excluded': exclude ? 1 : 0, 'synced': 0},
+      'id = ?',
+      [billId],
+    );
+  }
+
   /// Soft-cancel a bill. Sets status='cancelled', amount_paid=0, records reason + timestamp.
   /// Caller is responsible for reversing inventory and removing MWL.
   Future<void> cancelBill(String billId, String reason) async {
@@ -270,13 +279,13 @@ class BillingService {
 
   Future<Map<String, dynamic>> getDashboardStats() async {
     final todayRows = await _db.rawQuery(
-      "SELECT COALESCE(SUM(final_amount), 0) as total FROM bills WHERE date(created_at) = date('now') AND status != 'cancelled'",
+      "SELECT COALESCE(SUM(final_amount), 0) as total FROM bills WHERE date(created_at) = date('now') AND status != 'cancelled' AND report_excluded = 0",
     );
     final pendingRows = await _db.rawQuery(
       "SELECT COUNT(*) as cnt FROM bills WHERE worklist_pushed = 1 AND scan_completed = 0 AND status != 'cancelled'",
     );
     final monthRows = await _db.rawQuery(
-      "SELECT COUNT(*) as cnt FROM bills WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') AND status != 'cancelled'",
+      "SELECT COUNT(*) as cnt FROM bills WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') AND status != 'cancelled' AND report_excluded = 0",
     );
 
     return {
@@ -432,6 +441,7 @@ class BillingService {
       LEFT JOIN scan_types s ON s.id = b.scan_type_id
       WHERE strftime('%Y-%m', b.created_at) = ?
         AND b.status != 'cancelled'
+        AND b.report_excluded = 0
       GROUP BY b.scan_type_id
       ORDER BY cnt DESC
       ''',
@@ -444,6 +454,7 @@ class BillingService {
       FROM bills
       WHERE strftime('%Y-%m', created_at) = ?
         AND status != 'cancelled'
+        AND report_excluded = 0
       GROUP BY payment_mode
       ''',
       [month],

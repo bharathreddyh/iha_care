@@ -138,6 +138,26 @@ Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
   return ok;
 }
 
+/// Toggles the report_excluded flag and shows a snackbar. Returns new value.
+Future<bool> toggleReportExclusion(BuildContext context, Bill bill) async {
+  final newValue = !bill.reportExcluded;
+  await context.read<BillingService>().toggleReportExclusion(
+    bill.id,
+    exclude: newValue,
+  );
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(newValue
+            ? '${bill.id} excluded from monthly reports'
+            : '${bill.id} included in monthly reports'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+  return newValue;
+}
+
 /// Returns true if the bill is still within the 5-min hard-delete window
 /// (UI can hide the menu item when false).
 bool canHardDelete(Bill bill) {
