@@ -165,3 +165,56 @@ CREATE TRIGGER t_doctors_upd        BEFORE UPDATE ON referral_doctors        FOR
 CREATE TRIGGER t_scan_types_upd     BEFORE UPDATE ON scan_types              FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER t_incentives_upd     BEFORE UPDATE ON doctor_scan_incentives  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER t_ledger_upd         BEFORE UPDATE ON incentive_ledger        FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ── Inventory ─────────────────────────────────────────────────────────────────
+
+CREATE TABLE inventory_items (
+  id               TEXT        PRIMARY KEY,
+  centre_id        UUID        NOT NULL REFERENCES centres(id),
+  name             TEXT        NOT NULL,
+  unit             TEXT        NOT NULL DEFAULT 'pcs',
+  current_quantity REAL        NOT NULL DEFAULT 0,
+  min_quantity     REAL        NOT NULL DEFAULT 0,
+  price_per_unit   REAL,
+  is_active        BOOLEAN     NOT NULL DEFAULT true,
+  updated_at       TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE inventory_scan_usage (
+  id           TEXT PRIMARY KEY,
+  centre_id    UUID NOT NULL REFERENCES centres(id),
+  scan_type_id TEXT NOT NULL,
+  item_id      TEXT NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  quantity     REAL NOT NULL DEFAULT 1,
+  updated_at   TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(centre_id, scan_type_id, item_id)
+);
+
+CREATE TABLE inventory_transactions (
+  id         TEXT        PRIMARY KEY,
+  centre_id  UUID        NOT NULL REFERENCES centres(id),
+  item_id    TEXT        NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  type       TEXT        NOT NULL,
+  quantity   REAL        NOT NULL,
+  bill_id    TEXT,
+  cost       REAL,
+  notes      TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- RLS
+ALTER TABLE inventory_items         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_scan_usage    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_transactions  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY inv_items_centre ON inventory_items
+  USING (centre_id IN (SELECT centre_id FROM centre_members WHERE user_id = auth.uid()));
+CREATE POLICY inv_usage_centre ON inventory_scan_usage
+  USING (centre_id IN (SELECT centre_id FROM centre_members WHERE user_id = auth.uid()));
+CREATE POLICY inv_txn_centre ON inventory_transactions
+  USING (centre_id IN (SELECT centre_id FROM centre_members WHERE user_id = auth.uid()));
+
+CREATE TRIGGER t_inv_items_upd BEFORE UPDATE ON inventory_items         FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER t_inv_usage_upd BEFORE UPDATE ON inventory_scan_usage    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER t_inv_txn_upd   BEFORE UPDATE ON inventory_transactions  FOR EACH ROW EXECUTE FUNCTION update_updated_at();

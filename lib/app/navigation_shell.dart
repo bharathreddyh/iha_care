@@ -9,6 +9,7 @@ import '../screens/billing/referral_doctors_screen.dart';
 import '../screens/billing/reports_screen.dart';
 import '../screens/billing/scan_types_screen.dart';
 import '../screens/billing/worklist_status_screen.dart';
+import '../screens/inventory/inventory_screen.dart';
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
 
@@ -133,6 +134,12 @@ class _NavigationShellState extends State<NavigationShell> {
                               tooltip: 'Incentive Report',
                               onPressed: () => _navigateTo(
                                   context, const IncentiveReportScreen()),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.inventory_2_outlined),
+                              tooltip: 'Inventory',
+                              onPressed: () => _navigateTo(
+                                  context, const InventoryScreen()),
                             ),
                             IconButton(
                               icon: const Icon(Icons.logout),

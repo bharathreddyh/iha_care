@@ -74,11 +74,17 @@ class SyncService extends ChangeNotifier {
       await _pushDoctorScanIncentives(centreId);
       await _pushBills(centreId);
       await _pushIncentiveLedger(centreId);
+      await _pushInventoryItems(centreId);
+      await _pushInventoryScanUsage(centreId);
+      await _pushInventoryTransactions(centreId);
 
       await _pullScanTypes();
       await _pullReferralDoctors(centreId);
       await _pullDoctorScanIncentives(centreId);
       await _pullBills(centreId);
+      await _pullInventoryItems(centreId);
+      await _pullInventoryScanUsage(centreId);
+      await _pullInventoryTransactions(centreId);
 
       _lastSync = DateTime.now();
       _lastError = null;
@@ -246,6 +252,104 @@ class SyncService extends ChangeNotifier {
       r.remove('centre_id');
       r.remove('updated_at');
       await _db.insert('doctor_scan_incentives', r);
+    }
+  }
+
+  Future<void> _pushInventoryItems(String centreId) async {
+    final rows = await _db.query('inventory_items', where: 'synced = 0');
+    if (rows.isEmpty) return;
+    final batch = rows.map((row) {
+      final r = Map<String, dynamic>.from(row);
+      r['centre_id'] = centreId;
+      r['is_active'] = r['is_active'] == 1;
+      r.remove('synced');
+      return r;
+    }).toList();
+    await _client.from('inventory_items').upsert(batch, onConflict: 'id');
+    for (final row in rows) {
+      await _db.update('inventory_items', {'synced': 1}, 'id = ?', [row['id']]);
+    }
+  }
+
+  Future<void> _pushInventoryScanUsage(String centreId) async {
+    final rows = await _db.query('inventory_scan_usage', where: 'synced = 0');
+    if (rows.isEmpty) return;
+    final batch = rows.map((row) {
+      final r = Map<String, dynamic>.from(row);
+      r['centre_id'] = centreId;
+      r.remove('synced');
+      return r;
+    }).toList();
+    await _client
+        .from('inventory_scan_usage')
+        .upsert(batch, onConflict: 'id');
+    for (final row in rows) {
+      await _db.update(
+          'inventory_scan_usage', {'synced': 1}, 'id = ?', [row['id']]);
+    }
+  }
+
+  Future<void> _pushInventoryTransactions(String centreId) async {
+    final rows =
+        await _db.query('inventory_transactions', where: 'synced = 0');
+    if (rows.isEmpty) return;
+    final batch = rows.map((row) {
+      final r = Map<String, dynamic>.from(row);
+      r['centre_id'] = centreId;
+      r.remove('synced');
+      return r;
+    }).toList();
+    await _client
+        .from('inventory_transactions')
+        .upsert(batch, onConflict: 'id');
+    for (final row in rows) {
+      await _db.update(
+          'inventory_transactions', {'synced': 1}, 'id = ?', [row['id']]);
+    }
+  }
+
+  Future<void> _pullInventoryItems(String centreId) async {
+    final remote = await _client
+        .from('inventory_items')
+        .select()
+        .eq('centre_id', centreId);
+    for (final row in remote) {
+      final r = Map<String, dynamic>.from(row);
+      r['is_active'] = r['is_active'] == true ? 1 : 0;
+      r['synced'] = 1;
+      r.remove('centre_id');
+      r.remove('updated_at');
+      await _db.insert('inventory_items', r);
+    }
+  }
+
+  Future<void> _pullInventoryScanUsage(String centreId) async {
+    final remote = await _client
+        .from('inventory_scan_usage')
+        .select()
+        .eq('centre_id', centreId);
+    for (final row in remote) {
+      final r = Map<String, dynamic>.from(row);
+      r['synced'] = 1;
+      r.remove('centre_id');
+      r.remove('updated_at');
+      await _db.insert('inventory_scan_usage', r);
+    }
+  }
+
+  Future<void> _pullInventoryTransactions(String centreId) async {
+    final remote = await _client
+        .from('inventory_transactions')
+        .select()
+        .eq('centre_id', centreId)
+        .order('created_at', ascending: false)
+        .limit(500);
+    for (final row in remote) {
+      final r = Map<String, dynamic>.from(row);
+      r['synced'] = 1;
+      r.remove('centre_id');
+      r.remove('updated_at');
+      await _db.insert('inventory_transactions', r);
     }
   }
 

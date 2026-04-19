@@ -5,6 +5,7 @@ import '../../models/billing/bill.dart';
 import '../../models/billing/referral_doctor.dart';
 import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
+import '../../services/inventory_service.dart';
 import '../../services/mwl_service.dart';
 import '../../utils/currency_formatter.dart';
 import 'receipt_preview_screen.dart';
@@ -156,6 +157,15 @@ class NewBillScreenState extends State<NewBillScreen> {
       );
 
       final savedBill = await billingService.createBill(draftBill);
+
+      // Auto-deduct inventory for this scan type (best-effort)
+      if (savedBill.scanTypeId != null) {
+        try {
+          await context
+              .read<InventoryService>()
+              .deductForBill(savedBill.id, savedBill.scanTypeId!);
+        } catch (_) {}
+      }
 
       // Best-effort MWL push
       final mwlResult = await mwlService.pushToWorklist(

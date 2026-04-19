@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -117,6 +117,44 @@ class DatabaseHelper {
       )
     ''');
 
+    batch.execute('''
+      CREATE TABLE inventory_items (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL DEFAULT 'pcs',
+        current_quantity REAL NOT NULL DEFAULT 0,
+        min_quantity REAL NOT NULL DEFAULT 0,
+        price_per_unit REAL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        synced INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE inventory_scan_usage (
+        id TEXT PRIMARY KEY,
+        scan_type_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 1,
+        synced INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(scan_type_id, item_id)
+      )
+    ''');
+
+    batch.execute('''
+      CREATE TABLE inventory_transactions (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        bill_id TEXT,
+        cost REAL,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        synced INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
     await batch.commit(noResult: true);
     await _seedScanTypes(db);
   }
@@ -152,6 +190,31 @@ class DatabaseHelper {
       try { await db.execute('ALTER TABLE bills ADD COLUMN report_created INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
       try { await db.execute('ALTER TABLE bills ADD COLUMN dispatched INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
       try { await db.execute('ALTER TABLE bills ADD COLUMN amount_paid REAL'); } catch (_) {}
+    }
+    if (oldVersion < 5) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS inventory_items (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL DEFAULT 'pcs',
+            current_quantity REAL NOT NULL DEFAULT 0, min_quantity REAL NOT NULL DEFAULT 0,
+            price_per_unit REAL, is_active INTEGER NOT NULL DEFAULT 1, synced INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS inventory_scan_usage (
+            id TEXT PRIMARY KEY, scan_type_id TEXT NOT NULL, item_id TEXT NOT NULL,
+            quantity REAL NOT NULL DEFAULT 1, synced INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(scan_type_id, item_id)
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS inventory_transactions (
+            id TEXT PRIMARY KEY, item_id TEXT NOT NULL, type TEXT NOT NULL,
+            quantity REAL NOT NULL, bill_id TEXT, cost REAL, notes TEXT,
+            created_at TEXT NOT NULL, synced INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      } catch (_) {}
     }
   }
 
@@ -236,5 +299,10 @@ class DatabaseHelper {
   Future<T> transaction<T>(Future<T> Function(Transaction txn) action) async {
     final db = await database;
     return db.transaction(action);
+  }
+
+  Future<int> rawUpdate(String sql, [List<dynamic>? args]) async {
+    final db = await database;
+    return db.rawUpdate(sql, args);
   }
 }

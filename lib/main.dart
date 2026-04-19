@@ -12,6 +12,7 @@ import 'config/supabase_config.dart';
 import 'screens/auth/login_screen.dart';
 import 'services/auth_service.dart';
 import 'services/billing_service.dart';
+import 'services/inventory_service.dart';
 import 'services/mwl_service.dart';
 import 'services/orthanc_service.dart';
 import 'services/sync_service.dart';
@@ -43,6 +44,7 @@ void main() async {
           update: (ctx, auth, prev) => prev ?? SyncService(auth),
         ),
         Provider<BillingService>(create: (_) => BillingService()),
+        Provider<InventoryService>(create: (_) => InventoryService()),
         Provider<MwlService>(create: (_) => MwlService()),
         Provider<OrthancService>(create: (_) => OrthancService()),
       ],
