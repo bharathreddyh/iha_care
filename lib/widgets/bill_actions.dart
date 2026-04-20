@@ -158,6 +158,78 @@ Future<bool> toggleReportExclusion(BuildContext context, Bill bill) async {
   return newValue;
 }
 
+/// Cancels all bills for the patient associated with [bill].
+/// Returns true if any were cancelled.
+Future<bool> deletePatientFlow(BuildContext context, Bill bill) async {
+  if (bill.patientId == null || bill.patientId!.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No patient ID on this bill — cannot bulk-cancel.')),
+    );
+    return false;
+  }
+
+  final billing = context.read<BillingService>();
+  final patientBills = await billing.getBillsForPatient(bill.patientId!);
+  final active = patientBills.where((b) => !b.isCancelled).toList();
+
+  if (!context.mounted) return false;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Delete patient ${bill.patientName}?'),
+      content: Text(
+        active.isEmpty
+            ? 'All bills for this patient are already cancelled.'
+            : 'This will cancel ${active.length} bill${active.length == 1 ? '' : 's'} '
+              'for ${bill.patientName} and restore inventory. '
+              'Bills cannot be hard-deleted if they are paid or synced.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep'),
+        ),
+        if (active.isNotEmpty)
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cancel All Bills'),
+          ),
+        if (active.isEmpty)
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('OK'),
+          ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !context.mounted) return false;
+
+  final inventory = context.read<InventoryService>();
+  final mwl = context.read<MwlService>();
+
+  for (final b in active) {
+    try { await inventory.reverseForBill(b.id); } catch (_) {}
+    if (b.worklistPushed && b.accessionNumber != null) {
+      try { await mwl.removeFromWorklist(b.accessionNumber!); } catch (_) {}
+    }
+  }
+
+  final count = await billing.cancelAllBillsForPatient(
+    bill.patientId!,
+    'Patient record deleted',
+  );
+
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$count bill${count == 1 ? '' : 's'} cancelled for ${bill.patientName}.')),
+    );
+  }
+  return count > 0;
+}
+
 /// Returns true if the bill is still within the 5-min hard-delete window
 /// (UI can hide the menu item when false).
 bool canHardDelete(Bill bill) {

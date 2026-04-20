@@ -38,6 +38,18 @@ class BillingService {
     await _db.update('scan_types', scan.toMap(), 'id = ?', [scan.id]);
   }
 
+  /// Deletes a scan type only if no bills reference it.
+  /// Returns true if deleted, false if bills exist.
+  Future<bool> deleteScanTypeIfUnused(String id) async {
+    final refs = await _db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM bills WHERE scan_type_id = ?',
+      [id],
+    );
+    if ((refs.first['cnt'] as int? ?? 0) > 0) return false;
+    await _db.delete('scan_types', where: 'id = ?', whereArgs: [id]);
+    return true;
+  }
+
   // ── Patient ID ────────────────────────────────────────────────────────────
 
   Future<String> generatePatientId() async {
@@ -230,6 +242,37 @@ class BillingService {
       'id = ?',
       [billId],
     );
+  }
+
+  /// Returns all bills for a given patient_id (or by name if id is null/empty).
+  Future<List<Bill>> getBillsForPatient(String patientId) async {
+    final rows = await _db.query(
+      'bills',
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(Bill.fromMap).toList();
+  }
+
+  /// Cancels all non-cancelled bills for a patient. Returns count cancelled.
+  Future<int> cancelAllBillsForPatient(String patientId, String reason) async {
+    final bills = await getBillsForPatient(patientId);
+    int count = 0;
+    final now = DateTime.now().toIso8601String();
+    for (final bill in bills) {
+      if (!bill.isCancelled) {
+        await _db.update('bills', {
+          'status': 'cancelled',
+          'amount_paid': 0,
+          'cancelled_at': now,
+          'cancel_reason': reason,
+          'synced': 0,
+        }, 'id = ?', [bill.id]);
+        count++;
+      }
+    }
+    return count;
   }
 
   /// Soft-cancel a bill. Sets status='cancelled', amount_paid=0, records reason + timestamp.

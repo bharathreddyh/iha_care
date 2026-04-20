@@ -281,15 +281,19 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                                       const PopupMenuItem(
                                         value: 'cancel',
                                         child: Text('Cancel Bill',
-                                            style:
-                                                TextStyle(color: Colors.red)),
+                                            style: TextStyle(color: Colors.red)),
                                       ),
                                     if (canHardDelete(bill))
                                       const PopupMenuItem(
                                         value: 'delete',
                                         child: Text('Delete (recent only)',
-                                            style:
-                                                TextStyle(color: Colors.red)),
+                                            style: TextStyle(color: Colors.red)),
+                                      ),
+                                    if (bill.patientId != null && bill.patientId!.isNotEmpty)
+                                      const PopupMenuItem(
+                                        value: 'delete_patient',
+                                        child: Text('Delete Patient',
+                                            style: TextStyle(color: Colors.red)),
                                       ),
                                   ],
                                   onSelected: (v) async {
@@ -305,6 +309,11 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                                     }
                                     if (v == 'delete') {
                                       if (await deleteBillFlow(context, bill)) {
+                                        _load();
+                                      }
+                                    }
+                                    if (v == 'delete_patient') {
+                                      if (await deletePatientFlow(context, bill)) {
                                         _load();
                                       }
                                     }
