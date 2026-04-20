@@ -56,6 +56,41 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
     _load();
   }
 
+  Future<void> _delete(ScanType scan) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${scan.name}"?'),
+        content: const Text(
+          'This permanently removes the scan type. '
+          'Not allowed if any bills have used it — deactivate instead.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await context.read<BillingService>().deleteScanTypeIfUnused(scan.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok
+            ? '"${scan.name}" deleted.'
+            : 'Cannot delete — bills exist for this scan type. Deactivate it instead.'),
+        backgroundColor: ok ? null : Colors.orange,
+      ));
+    }
+    if (ok) _load();
+  }
+
   Map<String, List<ScanType>> get _grouped {
     final map = <String, List<ScanType>>{};
     for (final s in _scanTypes) {
@@ -120,6 +155,11 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.edit_outlined),
                                   onPressed: () => _openForm(scan),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  tooltip: 'Delete',
+                                  onPressed: () => _delete(scan),
                                 ),
                               ],
                             ),
