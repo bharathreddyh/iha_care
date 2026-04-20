@@ -433,15 +433,28 @@ class BillingService {
 
   // ── Reports ───────────────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> getReportData(String month) async {
+  Future<Map<String, dynamic>> getReportData(
+    String month, {
+    bool includeExcluded = false,
+    bool includeCancelled = false,
+  }) async {
+    String buildFilter(String alias) {
+      final parts = <String>[];
+      if (!includeCancelled) parts.add("$alias.status != 'cancelled'");
+      if (!includeExcluded) parts.add('$alias.report_excluded = 0');
+      return parts.isEmpty ? '' : 'AND ${parts.join(' AND ')}';
+    }
+
+    final bareFilter = buildFilter('bills');
+    final aliasedFilter = buildFilter('b');
+
     final scanVolumeRows = await _db.rawQuery(
       '''
       SELECT b.scan_type_id, s.name, COUNT(*) as cnt, SUM(b.final_amount) as revenue
       FROM bills b
       LEFT JOIN scan_types s ON s.id = b.scan_type_id
       WHERE strftime('%Y-%m', b.created_at) = ?
-        AND b.status != 'cancelled'
-        AND b.report_excluded = 0
+        $aliasedFilter
       GROUP BY b.scan_type_id
       ORDER BY cnt DESC
       ''',
@@ -453,9 +466,41 @@ class BillingService {
       SELECT payment_mode, COUNT(*) as cnt, SUM(final_amount) as total
       FROM bills
       WHERE strftime('%Y-%m', created_at) = ?
-        AND status != 'cancelled'
-        AND report_excluded = 0
+        $bareFilter
       GROUP BY payment_mode
+      ''',
+      [month],
+    );
+
+    final totalsRow = await _db.rawQuery(
+      '''
+      SELECT COUNT(*) as cnt,
+             COALESCE(SUM(final_amount), 0) as total,
+             COALESCE(SUM(discount), 0) as discount
+      FROM bills
+      WHERE strftime('%Y-%m', created_at) = ?
+        $bareFilter
+      ''',
+      [month],
+    );
+
+    final excludedRow = await _db.rawQuery(
+      '''
+      SELECT COUNT(*) as cnt,
+             COALESCE(SUM(final_amount), 0) as total
+      FROM bills
+      WHERE strftime('%Y-%m', created_at) = ?
+        AND report_excluded = 1
+        AND status != 'cancelled'
+      ''',
+      [month],
+    );
+
+    final cancelledRow = await _db.rawQuery(
+      '''
+      SELECT COUNT(*) as cnt FROM bills
+      WHERE strftime('%Y-%m', created_at) = ?
+        AND status = 'cancelled'
       ''',
       [month],
     );
@@ -472,6 +517,12 @@ class BillingService {
       'scanVolume': scanVolumeRows,
       'paymentSplit': paymentRows,
       'pcpdntCount': pcpdntRows.first['cnt'] as int? ?? 0,
+      'totalCount': totalsRow.first['cnt'] as int? ?? 0,
+      'totalRevenue': (totalsRow.first['total'] as num? ?? 0).toDouble(),
+      'totalDiscount': (totalsRow.first['discount'] as num? ?? 0).toDouble(),
+      'excludedCount': excludedRow.first['cnt'] as int? ?? 0,
+      'excludedRevenue': (excludedRow.first['total'] as num? ?? 0).toDouble(),
+      'cancelledCount': cancelledRow.first['cnt'] as int? ?? 0,
     };
   }
 }

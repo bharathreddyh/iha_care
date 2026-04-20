@@ -185,6 +185,131 @@ Future<Uint8List> generateIncentiveReport(
   return pdf.save();
 }
 
+Future<Uint8List> generateMonthlyReport({
+  required String month,
+  required Map<String, dynamic> data,
+  required bool includeExcluded,
+  required bool includeCancelled,
+}) async {
+  final pdf = pw.Document();
+
+  final scanVolume = (data['scanVolume'] as List).cast<Map<String, dynamic>>();
+  final paymentSplit =
+      (data['paymentSplit'] as List).cast<Map<String, dynamic>>();
+  final totalCount = data['totalCount'] as int? ?? 0;
+  final totalRevenue = (data['totalRevenue'] as num? ?? 0).toDouble();
+  final totalDiscount = (data['totalDiscount'] as num? ?? 0).toDouble();
+  final excludedCount = data['excludedCount'] as int? ?? 0;
+  final excludedRevenue = (data['excludedRevenue'] as num? ?? 0).toDouble();
+  final cancelledCount = data['cancelledCount'] as int? ?? 0;
+  final pcpdntCount = data['pcpdntCount'] as int? ?? 0;
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (ctx) => [
+        pw.Text(
+          'IHA Care — Monthly Report',
+          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.Text(
+          formatMonthYear(month),
+          style: const pw.TextStyle(fontSize: 12),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          'Generated ${formatDateTime(DateTime.now().toIso8601String())}',
+          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          'Filters: '
+          '${includeExcluded ? "incl. excluded" : "excl. excluded"}, '
+          '${includeCancelled ? "incl. cancelled" : "excl. cancelled"}',
+          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 16),
+
+        // Summary block
+        pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey400),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _row('Total Bills', totalCount.toString()),
+              _row('Gross Revenue', formatCurrency(totalRevenue)),
+              _row('Total Discount', formatCurrency(totalDiscount)),
+              _row('PCPNDT Form-F Count', pcpdntCount.toString()),
+              if (excludedCount > 0)
+                _row('Excluded from this report',
+                    '$excludedCount bills · ${formatCurrency(excludedRevenue)}'),
+              if (cancelledCount > 0)
+                _row('Cancelled this month', '$cancelledCount bills'),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 16),
+
+        pw.Text('Scan Volume',
+            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 6),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(4),
+            1: const pw.FlexColumnWidth(1),
+            2: const pw.FlexColumnWidth(2),
+          },
+          children: [
+            _tableHeader(['Scan Type', 'Count', 'Revenue']),
+            if (scanVolume.isEmpty)
+              _tableRow(['No data', '', '']),
+            ...scanVolume.map((r) => _tableRow([
+                  (r['name'] as String?) ?? 'Unknown',
+                  ((r['cnt'] as int?) ?? 0).toString(),
+                  formatCurrency((r['revenue'] as num? ?? 0).toDouble()),
+                ])),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+
+        pw.Text('Payment Mode Split',
+            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 6),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(3),
+            1: const pw.FlexColumnWidth(1),
+            2: const pw.FlexColumnWidth(2),
+          },
+          children: [
+            _tableHeader(['Mode', 'Count', 'Total']),
+            if (paymentSplit.isEmpty)
+              _tableRow(['No data', '', '']),
+            ...paymentSplit.map((r) => _tableRow([
+                  (r['payment_mode'] as String?) ?? '-',
+                  ((r['cnt'] as int?) ?? 0).toString(),
+                  formatCurrency((r['total'] as num? ?? 0).toDouble()),
+                ])),
+            _tableRow(
+              ['TOTAL', totalCount.toString(), formatCurrency(totalRevenue)],
+              bold: true,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  return pdf.save();
+}
+
 pw.Widget _row(String label, String value) => pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
