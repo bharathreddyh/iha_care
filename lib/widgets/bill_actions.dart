@@ -91,16 +91,18 @@ Future<bool> cancelBillFlow(BuildContext context, Bill bill) async {
   return true;
 }
 
-/// Hard-delete an unpaid bill. Returns true if deleted.
+/// Hard-delete an unpaid bill. Reverses inventory and removes the MWL entry
+/// before deleting the row. Returns true if deleted.
 Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Delete bill ${bill.id}?'),
       content: const Text(
-        'This permanently removes the bill from the database.\n\n'
-        'Only allowed for unpaid bills with no MWL push and not yet '
-        'synced to cloud. Use Cancel instead if the bill has been paid.',
+        'This permanently removes the bill from the database and its '
+        'entry from the scanner worklist.\n\n'
+        'Only allowed for unpaid bills that have not yet been synced to '
+        'cloud. Use Cancel if the bill has been paid.',
       ),
       actions: [
         TextButton(
@@ -119,8 +121,12 @@ Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
 
   final billing = context.read<BillingService>();
   final inventory = context.read<InventoryService>();
+  final mwl = context.read<MwlService>();
 
   try { await inventory.reverseForBill(bill.id); } catch (_) {}
+  if (bill.worklistPushed && bill.accessionNumber != null) {
+    try { await mwl.removeFromWorklist(bill.accessionNumber!); } catch (_) {}
+  }
   final ok = await billing.deleteBillIfEligible(bill.id);
 
   if (context.mounted) {
@@ -128,7 +134,7 @@ Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
       SnackBar(
         content: Text(ok
             ? 'Bill ${bill.id} deleted.'
-            : 'Cannot delete — bill is already paid, synced, or pushed to MWL. Use Cancel instead.'),
+            : 'Cannot delete — bill is already paid or synced to cloud. Use Cancel instead.'),
         backgroundColor: ok ? null : Colors.orange,
       ),
     );
@@ -232,10 +238,9 @@ Future<bool> deletePatientFlow(BuildContext context, Bill bill) async {
   return deleted + anonymized > 0;
 }
 
-/// Returns true if the bill can be hard-deleted (unpaid and not pushed to MWL).
-/// Cloud sync state is checked inside the service itself.
+/// Returns true if the bill can be hard-deleted (unpaid and not cancelled).
+/// Cloud-sync state is checked inside the service itself; MWL cleanup is
+/// handled by deleteBillFlow.
 bool canHardDelete(Bill bill) {
-  return !bill.worklistPushed &&
-      bill.amountPaid <= 0 &&
-      !bill.isCancelled;
+  return bill.amountPaid <= 0 && !bill.isCancelled;
 }

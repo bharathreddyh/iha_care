@@ -377,11 +377,11 @@ class BillingService {
     final rows = await _db.query('bills', where: 'id = ?', whereArgs: [billId]);
     if (rows.isEmpty) return false;
     final row = rows.first;
-    final worklistPushed = (row['worklist_pushed'] as int? ?? 0) == 1;
     final amountPaid = (row['amount_paid'] as num? ?? 0).toDouble();
     final synced = (row['synced'] as int? ?? 0) == 1;
-    // Allow deletion of any unpaid bill that hasn't been pushed to MWL or synced to cloud.
-    if (worklistPushed || amountPaid > 0 || synced) {
+    // Allow deletion of any unpaid bill that hasn't been synced to cloud.
+    // MWL cleanup is the caller's responsibility (done in deleteBillFlow).
+    if (amountPaid > 0 || synced) {
       return false;
     }
     await _db.transaction((txn) async {
