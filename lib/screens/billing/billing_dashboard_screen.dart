@@ -632,7 +632,7 @@ class _PatientRow extends StatelessWidget {
                 if (canHardDelete(bill))
                   const PopupMenuItem(
                     value: 'delete',
-                    child: Text('Delete (recent only)',
+                    child: Text('Delete Bill',
                         style: TextStyle(color: Colors.red)),
                   ),
               ],

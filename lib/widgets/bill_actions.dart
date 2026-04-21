@@ -91,17 +91,16 @@ Future<bool> cancelBillFlow(BuildContext context, Bill bill) async {
   return true;
 }
 
-/// Hard-delete a recently created bill (if eligible). Returns true if deleted.
+/// Hard-delete an unpaid bill. Returns true if deleted.
 Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Delete bill ${bill.id}?'),
       content: const Text(
-        'This permanently removes the bill and creates a gap in the sequence. '
-        'Only allowed for bills created within 5 minutes, with no MWL push, '
-        'no payment, and not yet cloud-synced.\n\n'
-        'Prefer Cancel for most situations.',
+        'This permanently removes the bill from the database.\n\n'
+        'Only allowed for unpaid bills with no MWL push and not yet '
+        'synced to cloud. Use Cancel instead if the bill has been paid.',
       ),
       actions: [
         TextButton(
@@ -121,7 +120,6 @@ Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
   final billing = context.read<BillingService>();
   final inventory = context.read<InventoryService>();
 
-  // Reverse inventory first (delete only wipes the txn rows, not stock changes).
   try { await inventory.reverseForBill(bill.id); } catch (_) {}
   final ok = await billing.deleteBillIfEligible(bill.id);
 
@@ -130,7 +128,7 @@ Future<bool> deleteBillFlow(BuildContext context, Bill bill) async {
       SnackBar(
         content: Text(ok
             ? 'Bill ${bill.id} deleted.'
-            : 'Cannot delete — bill is too old, already synced, paid, or pushed to MWL. Use Cancel instead.'),
+            : 'Cannot delete — bill is already paid, synced, or pushed to MWL. Use Cancel instead.'),
         backgroundColor: ok ? null : Colors.orange,
       ),
     );
@@ -234,13 +232,10 @@ Future<bool> deletePatientFlow(BuildContext context, Bill bill) async {
   return deleted + anonymized > 0;
 }
 
-/// Returns true if the bill is still within the 5-min hard-delete window
-/// (UI can hide the menu item when false).
+/// Returns true if the bill can be hard-deleted (unpaid and not pushed to MWL).
+/// Cloud sync state is checked inside the service itself.
 bool canHardDelete(Bill bill) {
-  final created = DateTime.tryParse(bill.createdAt);
-  if (created == null) return false;
-  return DateTime.now().difference(created).inMinutes <= 5 &&
-      !bill.worklistPushed &&
+  return !bill.worklistPushed &&
       bill.amountPaid <= 0 &&
       !bill.isCancelled;
 }

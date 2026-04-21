@@ -377,13 +377,11 @@ class BillingService {
     final rows = await _db.query('bills', where: 'id = ?', whereArgs: [billId]);
     if (rows.isEmpty) return false;
     final row = rows.first;
-    final createdAt = DateTime.tryParse(row['created_at'] as String? ?? '');
-    if (createdAt == null) return false;
-    final ageMinutes = DateTime.now().difference(createdAt).inMinutes;
     final worklistPushed = (row['worklist_pushed'] as int? ?? 0) == 1;
     final amountPaid = (row['amount_paid'] as num? ?? 0).toDouble();
     final synced = (row['synced'] as int? ?? 0) == 1;
-    if (ageMinutes > 5 || worklistPushed || amountPaid > 0 || synced) {
+    // Allow deletion of any unpaid bill that hasn't been pushed to MWL or synced to cloud.
+    if (worklistPushed || amountPaid > 0 || synced) {
       return false;
     }
     await _db.transaction((txn) async {
