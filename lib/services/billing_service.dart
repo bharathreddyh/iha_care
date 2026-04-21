@@ -38,16 +38,34 @@ class BillingService {
     await _db.update('scan_types', scan.toMap(), 'id = ?', [scan.id]);
   }
 
-  /// Deletes a scan type only if no bills reference it.
-  /// Returns true if deleted, false if bills exist.
-  Future<bool> deleteScanTypeIfUnused(String id) async {
+  Future<int> rawBillCountForScanType(String scanTypeId) async {
+    final rows = await _db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM bills WHERE scan_type_id = ?',
+      [scanTypeId],
+    );
+    return rows.first['cnt'] as int? ?? 0;
+  }
+
+  /// Deletes a scan type and nulls out scan_type_id on any bills that used it.
+  /// Returns the count of bills that were affected.
+  Future<int> deleteScanType(String id) async {
     final refs = await _db.rawQuery(
       'SELECT COUNT(*) as cnt FROM bills WHERE scan_type_id = ?',
       [id],
     );
-    if ((refs.first['cnt'] as int? ?? 0) > 0) return false;
-    await _db.delete('scan_types', where: 'id = ?', whereArgs: [id]);
-    return true;
+    final affectedBills = refs.first['cnt'] as int? ?? 0;
+    await _db.transaction((txn) async {
+      if (affectedBills > 0) {
+        await txn.rawUpdate(
+          'UPDATE bills SET scan_type_id = NULL, synced = 0 WHERE scan_type_id = ?',
+          [id],
+        );
+      }
+      await txn.delete('scan_types', where: 'id = ?', whereArgs: [id]);
+      await txn.delete('doctor_scan_incentives',
+          where: 'scan_type_id = ?', whereArgs: [id]);
+    });
+    return affectedBills;
   }
 
   // ── Patient ID ────────────────────────────────────────────────────────────

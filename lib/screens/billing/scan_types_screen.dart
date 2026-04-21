@@ -57,13 +57,20 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
   }
 
   Future<void> _delete(ScanType scan) async {
+    final service = context.read<BillingService>();
+    final refs = await service.rawBillCountForScanType(scan.id);
+    if (!mounted) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete "${scan.name}"?'),
-        content: const Text(
-          'This permanently removes the scan type. '
-          'Not allowed if any bills have used it — deactivate instead.',
+        content: Text(
+          refs == 0
+              ? 'This permanently removes the scan type from the database.'
+              : 'This scan type appears in $refs bill${refs == 1 ? '' : 's'}. '
+                'It will be permanently deleted and those bills will show '
+                '"Unknown" for scan type.',
         ),
         actions: [
           TextButton(
@@ -79,16 +86,13 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    final ok = await context.read<BillingService>().deleteScanTypeIfUnused(scan.id);
+    await service.deleteScanType(scan.id);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok
-            ? '"${scan.name}" deleted.'
-            : 'Cannot delete — bills exist for this scan type. Deactivate it instead.'),
-        backgroundColor: ok ? null : Colors.orange,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${scan.name}" deleted.')),
+      );
     }
-    if (ok) _load();
+    _load();
   }
 
   Map<String, List<ScanType>> get _grouped {
