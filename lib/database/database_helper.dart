@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -158,6 +158,13 @@ class DatabaseHelper {
       )
     ''');
 
+    batch.execute('''
+      CREATE TABLE app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
     await batch.commit(noResult: true);
     await _seedScanTypes(db);
   }
@@ -225,6 +232,16 @@ class DatabaseHelper {
     }
     if (oldVersion < 7) {
       try { await db.execute('ALTER TABLE bills ADD COLUMN report_excluded INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+    }
+    if (oldVersion < 8) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS app_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          )
+        ''');
+      } catch (_) {}
     }
   }
 

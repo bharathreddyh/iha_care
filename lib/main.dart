@@ -10,8 +10,11 @@ import 'app/app_theme.dart';
 import 'app/navigation_shell.dart';
 import 'config/supabase_config.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/setup/role_picker_screen.dart';
+import 'services/app_settings_service.dart';
 import 'services/auth_service.dart';
 import 'services/billing_service.dart';
+import 'services/biometry_service.dart';
 import 'services/inventory_service.dart';
 import 'services/mwl_service.dart';
 import 'services/orthanc_service.dart';
@@ -35,10 +38,14 @@ void main() async {
   final authService = AuthService();
   await authService.initialize();
 
+  final settingsService = AppSettingsService();
+  await settingsService.load();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: authService),
+        ChangeNotifierProvider.value(value: settingsService),
         ChangeNotifierProxyProvider<AuthService, SyncService>(
           create: (ctx) => SyncService(ctx.read<AuthService>()),
           update: (ctx, auth, prev) => prev ?? SyncService(auth),
@@ -47,6 +54,7 @@ void main() async {
         Provider<InventoryService>(create: (_) => InventoryService()),
         Provider<MwlService>(create: (_) => MwlService()),
         Provider<OrthancService>(create: (_) => OrthancService()),
+        Provider<BiometryService>(create: (_) => BiometryService()),
       ],
       child: const IhaCareApp(),
     ),
@@ -62,18 +70,21 @@ class IhaCareApp extends StatelessWidget {
       title: 'IHA Care — USG Billing',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: const AuthGate(),
+      home: const _AppGate(),
     );
   }
 }
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+class _AppGate extends StatelessWidget {
+  const _AppGate();
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
-    if (auth.isLoggedIn) return const NavigationShell();
-    return const LoginScreen();
+    final settings = context.watch<AppSettingsService>();
+
+    if (!auth.isLoggedIn) return const LoginScreen();
+    if (!settings.roleSet) return const RolePickerScreen();
+    return const NavigationShell();
   }
 }

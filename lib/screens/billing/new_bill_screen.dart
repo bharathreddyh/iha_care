@@ -6,7 +6,6 @@ import '../../models/billing/referral_doctor.dart';
 import '../../models/billing/scan_type.dart';
 import '../../services/billing_service.dart';
 import '../../services/inventory_service.dart';
-import '../../services/mwl_service.dart';
 import '../../utils/currency_formatter.dart';
 import 'receipt_preview_screen.dart';
 
@@ -134,7 +133,6 @@ class NewBillScreenState extends State<NewBillScreen> {
 
     try {
       final billingService = context.read<BillingService>();
-      final mwlService = context.read<MwlService>();
 
       final draftBill = Bill(
         id: '',
@@ -167,25 +165,7 @@ class NewBillScreenState extends State<NewBillScreen> {
         } catch (_) {}
       }
 
-      // Best-effort MWL push
-      final mwlResult = await mwlService.pushToWorklist(
-        bill: savedBill,
-        scanType: _selectedScan!,
-        referralDoctor: _selectedDoctor,
-      );
-
-      if (mwlResult.success) {
-        await billingService.markWorklistPushed(savedBill.id);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Bill saved. MWL push failed: ${mwlResult.error}'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-
+      // MWL push is handled by the typist workstation — bill is saved only.
       if (mounted) {
         final scanSnapshot = _selectedScan;
         final doctorSnapshot = _selectedDoctor;
