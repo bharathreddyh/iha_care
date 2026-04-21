@@ -59,6 +59,19 @@ class _WorklistQueueScreenState extends State<WorklistQueueScreen> {
     final scan = bill.scanTypeId != null
         ? await service.getScanType(bill.scanTypeId!)
         : null;
+
+    if (scan == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot push — no scan type on this bill.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     final doc = bill.referralDoctorId != null
         ? await service.getReferralDoctor(bill.referralDoctorId!)
         : null;

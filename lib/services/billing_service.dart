@@ -347,8 +347,7 @@ class BillingService {
     }
 
     // Scrub PCPNDT form rows for this patient that are still linked
-    await _db.delete('pcpndt_form_f',
-        where: 'patient_id = ?', whereArgs: [patientId]);
+    await _db.delete('pcpndt_form_f', 'patient_id = ?', [patientId]);
 
     return {'deleted': deleted, 'anonymized': anonymized};
   }
