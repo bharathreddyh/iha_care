@@ -293,6 +293,66 @@ class BillingService {
     return count;
   }
 
+  /// Completely purges patient data from the database.
+  /// Hard-deletes bills that are eligible (recent, unpaid, not pushed, not synced).
+  /// For the rest, scrubs PII fields (name/id/dob/sex/phone) so no identifying
+  /// info remains, while keeping the bill row for accounting integrity.
+  /// Also deletes any pcpndt_form_f rows for this patient.
+  ///
+  /// Returns {deleted: n, anonymized: n} counts.
+  Future<Map<String, int>> purgePatientData(String patientId) async {
+    final rows = await _db.query(
+      'bills',
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+    );
+    int deleted = 0;
+    int anonymized = 0;
+    final now = DateTime.now();
+
+    for (final row in rows) {
+      final billId = row['id'] as String;
+      final createdAt = DateTime.tryParse(row['created_at'] as String? ?? '');
+      final ageMin = createdAt == null
+          ? 99999
+          : now.difference(createdAt).inMinutes;
+      final worklistPushed = (row['worklist_pushed'] as int? ?? 0) == 1;
+      final amountPaid = (row['amount_paid'] as num? ?? 0).toDouble();
+      final synced = (row['synced'] as int? ?? 0) == 1;
+
+      final eligibleForHardDelete =
+          ageMin <= 5 && !worklistPushed && amountPaid <= 0 && !synced;
+
+      if (eligibleForHardDelete) {
+        await _db.transaction((txn) async {
+          await txn.delete('inventory_transactions',
+              where: 'bill_id = ?', whereArgs: [billId]);
+          await txn.delete('pcpndt_form_f',
+              where: 'bill_id = ?', whereArgs: [billId]);
+          await txn.delete('bills', where: 'id = ?', whereArgs: [billId]);
+        });
+        deleted++;
+      } else {
+        await _db.update('bills', {
+          'patient_name': 'DELETED',
+          'patient_id': null,
+          'patient_dob': null,
+          'patient_sex': null,
+          'patient_phone': null,
+          'notes': null,
+          'synced': 0,
+        }, 'id = ?', [billId]);
+        anonymized++;
+      }
+    }
+
+    // Scrub PCPNDT form rows for this patient that are still linked
+    await _db.delete('pcpndt_form_f',
+        where: 'patient_id = ?', whereArgs: [patientId]);
+
+    return {'deleted': deleted, 'anonymized': anonymized};
+  }
+
   /// Soft-cancel a bill. Sets status='cancelled', amount_paid=0, records reason + timestamp.
   /// Caller is responsible for reversing inventory and removing MWL.
   Future<void> cancelBill(String billId, String reason) async {
