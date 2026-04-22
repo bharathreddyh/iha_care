@@ -22,6 +22,7 @@ class WorklistQueueScreen extends StatefulWidget {
 
 class _WorklistQueueScreenState extends State<WorklistQueueScreen> {
   List<Bill> _bills = [];
+  Map<String, ScanType> _scanTypes = {};
   bool _loading = true;
   Timer? _refreshTimer;
 
@@ -41,15 +42,25 @@ class _WorklistQueueScreenState extends State<WorklistQueueScreen> {
   }
 
   Future<void> _load() async {
-    final bills = await context.read<BillingService>().getBills(
-          statusFilter: 'All',
-        );
+    final service = context.read<BillingService>();
+    final results = await Future.wait([
+      service.getBills(statusFilter: 'All'),
+      service.getScanTypes(),
+    ]);
+    final bills = results[0] as List<Bill>;
+    final scanTypes = results[1] as List<ScanType>;
     // Show active (non-cancelled, non-completed) bills oldest-first
     final queue = bills
         .where((b) => !b.isCancelled && !b.scanCompleted)
         .toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    if (mounted) setState(() { _bills = queue; _loading = false; });
+    if (mounted) {
+      setState(() {
+        _bills = queue;
+        _scanTypes = {for (final s in scanTypes) s.id: s};
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _pushToMwl(Bill bill) async {
@@ -141,6 +152,7 @@ class _WorklistQueueScreenState extends State<WorklistQueueScreen> {
                   itemCount: _bills.length,
                   itemBuilder: (_, i) => _QueueCard(
                     bill: _bills[i],
+                    scanType: _scanTypes[_bills[i].scanTypeId],
                     onPush: () => _pushToMwl(_bills[i]),
                     onComplete: () => _markComplete(_bills[i]),
                     onViewImages: () => Navigator.push(
@@ -165,6 +177,7 @@ class _WorklistQueueScreenState extends State<WorklistQueueScreen> {
 
 class _QueueCard extends StatefulWidget {
   final Bill bill;
+  final ScanType? scanType;
   final VoidCallback onPush;
   final VoidCallback onComplete;
   final VoidCallback onViewImages;
@@ -172,6 +185,7 @@ class _QueueCard extends StatefulWidget {
 
   const _QueueCard({
     required this.bill,
+    this.scanType,
     required this.onPush,
     required this.onComplete,
     required this.onViewImages,
@@ -280,7 +294,7 @@ class _QueueCardState extends State<_QueueCard> {
             const SizedBox(height: 8),
             _InfoRow(
                 icon: Icons.document_scanner_outlined,
-                label: bill.scanTypeId ?? 'Unknown scan'),
+                label: widget.scanType?.name ?? bill.scanTypeId ?? 'Unknown scan'),
             _InfoRow(
                 icon: Icons.access_time_outlined,
                 label: formatDateTime(bill.createdAt)),
