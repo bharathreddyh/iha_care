@@ -5,7 +5,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../models/billing/bill.dart';
-import '../models/billing/incentive_record.dart';
 import '../models/billing/referral_doctor.dart';
 import '../models/billing/scan_type.dart';
 import 'currency_formatter.dart';
@@ -122,83 +121,113 @@ Future<Uint8List> generateReceipt(
 
 // ── Incentive report ──────────────────────────────────────────────────────────
 
-Future<Uint8List> generateIncentiveReport(
-  List<IncentiveRecord> records,
-  Map<String, ReferralDoctor> doctors,
-  String month,
-) async {
+Future<Uint8List> generateIncentiveReport({
+  required String month,
+  required List<Map<String, dynamic>> rows,
+  required Map<String, ReferralDoctor> doctors,
+}) async {
   final f = await _loadFonts();
   final pdf = pw.Document();
 
+  // Group rows by doctor
+  final grouped = <String, List<Map<String, dynamic>>>{};
+  for (final r in rows) {
+    final id = r['referral_doctor_id'] as String;
+    grouped.putIfAbsent(id, () => []).add(r);
+  }
+  final sortedDoctorIds = grouped.keys.toList()
+    ..sort((a, b) {
+      final na = doctors[a]?.name ?? a;
+      final nb = doctors[b]?.name ?? b;
+      return na.compareTo(nb);
+    });
+
+  final docSections = <pw.Widget>[];
+  for (final doctorId in sortedDoctorIds) {
+    final doctorRows = grouped[doctorId]!;
+    final doctor = doctors[doctorId];
+    final doctorName =
+        doctor != null ? 'Dr. ${doctor.name}' : doctorId;
+
+    double doctorTotal = 0;
+    final dataRows = <pw.TableRow>[];
+    for (final r in doctorRows) {
+      final incentive = (r['incentive_rate'] as num).toDouble();
+      doctorTotal += incentive;
+      dataRows.add(_tableRow([
+        r['patient_name'] as String,
+        formatDate(r['created_at'] as String),
+        r['scan_type_name'] as String,
+        formatCurrency(incentive),
+      ], f));
+    }
+
+    docSections.add(
+      pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.SizedBox(height: 10),
+          pw.Center(
+            child: pw.Text(
+              doctorName,
+              style: f.style(fontSize: 13, isBold: true),
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Table(
+            border: pw.TableBorder.all(),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(3),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(3),
+              3: const pw.FlexColumnWidth(2),
+            },
+            children: [
+              _tableHeader(
+                  ['Patient Name', 'Date', 'Scan Type', 'Incentive (₹)'], f),
+              ...dataRows,
+              _tableRow(
+                [
+                  'Total — ${doctorRows.length} referral${doctorRows.length == 1 ? '' : 's'}',
+                  '',
+                  '',
+                  formatCurrency(doctorTotal),
+                ],
+                f,
+                bold: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   pdf.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
-      build: (ctx) {
-        double totalReferrals = 0;
-        double totalBilled = 0;
-        double totalIncentive = 0;
-        for (final r in records) {
-          totalReferrals += r.referralCount;
-          totalBilled += r.totalBilled;
-          totalIncentive += r.incentiveAmount;
-        }
-
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              'Sahyadri Scan and Diagnostics — Referral Incentive Report',
-              style: f.style(fontSize: 16, isBold: true),
-            ),
-            pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
-            pw.SizedBox(height: 16),
-            pw.Table(
-              border: pw.TableBorder.all(),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(3),
-                1: const pw.FlexColumnWidth(2),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(2),
-                4: const pw.FlexColumnWidth(2),
-              },
+      header: (ctx) => ctx.pageNumber == 1
+          ? pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _tableHeader(
-                    ['Doctor / Scan', 'Clinic', 'Referrals', 'Billed (₹)', 'Incentive (₹)'], f),
-                ...records.expand((r) {
-                  final doc = doctors[r.referralDoctorId];
-                  return [
-                    _tableRow([
-                      doc?.name ?? r.referralDoctorId,
-                      doc?.clinicName ?? '-',
-                      r.referralCount.toString(),
-                      formatCurrency(r.totalBilled),
-                      formatCurrency(r.incentiveAmount),
-                    ], f),
-                    ...r.breakdown.map((b) => _tableRow(
-                      [
-                        '  └ ${b.scanTypeName}',
-                        '',
-                        '${b.count} × ${formatCurrency(b.rate)}',
-                        '',
-                        formatCurrency(b.total),
-                      ],
-                      f,
-                      isBreakdown: true,
-                    )),
-                  ];
-                }),
-                _tableRow(
-                  ['TOTAL', '', totalReferrals.toInt().toString(),
-                    formatCurrency(totalBilled), formatCurrency(totalIncentive)],
-                  f,
-                  bold: true,
+                pw.Text(
+                  'Sahyadri Scan and Diagnostics — Referral Incentive Report',
+                  style: f.style(fontSize: 16, isBold: true),
                 ),
+                pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
+                pw.SizedBox(height: 8),
               ],
-            ),
-          ],
-        );
-      },
+            )
+          : pw.SizedBox(),
+      build: (ctx) => docSections.isEmpty
+          ? [
+              pw.Center(
+                child: pw.Text('No referral data for this month.',
+                    style: f.style(fontSize: 11)),
+              )
+            ]
+          : docSections,
     ),
   );
 

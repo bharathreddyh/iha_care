@@ -138,12 +138,21 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
 
   Future<void> _exportPdf() async {
     setState(() => _exporting = true);
-    final bytes = await generateIncentiveReport(_records, _doctors, _monthKey);
-    await Printing.sharePdf(
-      bytes: bytes,
-      filename: 'incentives_$_monthKey.pdf',
-    );
-    if (mounted) setState(() => _exporting = false);
+    try {
+      final service = context.read<BillingService>();
+      final rows = await service.getReferralDetailForMonth(_monthKey);
+      final bytes = await generateIncentiveReport(
+        month: _monthKey,
+        rows: rows,
+        doctors: _doctors,
+      );
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'incentives_$_monthKey.pdf',
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   Future<void> _markAllPaid() async {
