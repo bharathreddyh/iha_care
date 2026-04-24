@@ -424,6 +424,35 @@ class BillingService {
     return rows.map(Bill.fromMap).toList();
   }
 
+  // ── Referral detail (per-bill, for Excel export) ─────────────────────────
+
+  /// Returns one map per bill: patient_name, created_at, scan_type_name,
+  /// referral_doctor_id, incentive_rate (₹ per bill).
+  /// Bills are sorted by doctor then date.
+  Future<List<Map<String, dynamic>>> getReferralDetailForMonth(
+      String month) async {
+    return _db.rawQuery(
+      '''
+      SELECT b.patient_name,
+             b.created_at,
+             COALESCE(s.name, 'Unknown') AS scan_type_name,
+             b.referral_doctor_id,
+             COALESCE(dsi.rate, 0)       AS incentive_rate
+      FROM   bills b
+      LEFT JOIN scan_types s
+             ON s.id = b.scan_type_id
+      LEFT JOIN doctor_scan_incentives dsi
+             ON dsi.doctor_id    = b.referral_doctor_id
+            AND dsi.scan_type_id = b.scan_type_id
+      WHERE  strftime('%Y-%m', b.created_at) = ?
+        AND  b.referral_doctor_id IS NOT NULL
+        AND  b.status != 'cancelled'
+      ORDER  BY b.referral_doctor_id, b.created_at
+      ''',
+      [month],
+    );
+  }
+
   // ── Incentives ────────────────────────────────────────────────────────────
 
   Future<List<IncentiveRecord>> calculateMonthlyIncentives(String month) async {

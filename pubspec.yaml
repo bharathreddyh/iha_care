@@ -22,6 +22,7 @@ dependencies:
   supabase_flutter: ^2.5.0
   connectivity_plus: ^6.0.0
   shared_preferences: ^2.2.0
+  excel: ^4.0.2
 
 dev_dependencies:
   flutter_test:

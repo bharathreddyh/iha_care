@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import 'dart:io';
+
 import '../../models/billing/incentive_record.dart';
 import '../../models/billing/referral_doctor.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
+import '../../utils/excel_exporter.dart';
 import '../../utils/pdf_generator.dart';
 
 class IncentiveReportScreen extends StatefulWidget {
@@ -25,6 +28,7 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
   Map<String, ReferralDoctor> _doctors = {};
   bool _loading = false;
   bool _exporting = false;
+  bool _exportingExcel = false;
 
   @override
   void initState() {
@@ -49,6 +53,57 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
         _doctors = docMap;
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _exportExcel() async {
+    setState(() => _exportingExcel = true);
+    try {
+      final service = context.read<BillingService>();
+      final rows = await service.getReferralDetailForMonth(_monthKey);
+      if (rows.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No referral data for this month.')),
+          );
+        }
+        return;
+      }
+      final filePath = await exportReferralSummaryExcel(
+        month: _monthKey,
+        rows: rows,
+        doctors: _doctors,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved: $filePath'),
+            action: SnackBarAction(
+              label: 'Open',
+              onPressed: () => _openFile(filePath),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingExcel = false);
+    }
+  }
+
+  void _openFile(String path) {
+    if (Platform.isWindows) {
+      Process.run('cmd', ['/c', 'start', '', path]);
+    } else if (Platform.isMacOS) {
+      Process.run('open', [path]);
+    } else {
+      Process.run('xdg-open', [path]);
     }
   }
 
@@ -103,6 +158,19 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
       appBar: AppBar(
         title: const Text('Incentive Report'),
         actions: [
+          if (_exportingExcel)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _exportExcel,
+            ),
           if (_exporting)
             const Padding(
               padding: EdgeInsets.all(16),
