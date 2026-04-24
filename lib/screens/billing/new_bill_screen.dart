@@ -224,8 +224,8 @@ class NewBillScreenState extends State<NewBillScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Reload scan types & doctors',
-            onPressed: _loadData,
+            tooltip: 'Reset form',
+            onPressed: () { _resetForm(); _loadData(); },
           ),
         ],
       ),
