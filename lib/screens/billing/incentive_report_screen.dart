@@ -57,21 +57,49 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
   }
 
   Future<void> _exportExcel() async {
+    // 1. Load raw rows first (needed to know which doctors have data)
+    final service = context.read<BillingService>();
+    final allRows = await service.getReferralDetailForMonth(_monthKey);
+
+    if (allRows.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No referral data for this month.')),
+        );
+      }
+      return;
+    }
+
+    // 2. Collect distinct doctor IDs that have rows this month
+    final doctorIds = allRows
+        .map((r) => r['referral_doctor_id'] as String)
+        .toSet()
+        .toList()
+      ..sort((a, b) {
+        final na = _doctors[a]?.name ?? a;
+        final nb = _doctors[b]?.name ?? b;
+        return na.compareTo(nb);
+      });
+
+    // 3. Show doctor-picker dialog
+    if (!mounted) return;
+    final selected = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _DoctorPickerDialog(
+        doctorIds: doctorIds,
+        doctors: _doctors,
+      ),
+    );
+    if (selected == null || selected.isEmpty) return;
+
+    // 4. Filter rows to selected doctors and export
     setState(() => _exportingExcel = true);
     try {
-      final service = context.read<BillingService>();
-      final rows = await service.getReferralDetailForMonth(_monthKey);
-      if (rows.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No referral data for this month.')),
-          );
-        }
-        return;
-      }
+      final filteredRows =
+          allRows.where((r) => selected.contains(r['referral_doctor_id'])).toList();
       final filePath = await exportReferralSummaryExcel(
         month: _monthKey,
-        rows: rows,
+        rows: filteredRows,
         doctors: _doctors,
       );
       if (mounted) {
@@ -88,7 +116,8 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'),
+          SnackBar(
+              content: Text('Export failed: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -417,4 +446,101 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
               fontWeight: bold ? FontWeight.bold : FontWeight.normal),
         ),
       );
+}
+
+// ── Doctor picker dialog ───────────────────────────────────────────────────────
+
+class _DoctorPickerDialog extends StatefulWidget {
+  final List<String> doctorIds;
+  final Map<String, ReferralDoctor> doctors;
+
+  const _DoctorPickerDialog({
+    required this.doctorIds,
+    required this.doctors,
+  });
+
+  @override
+  State<_DoctorPickerDialog> createState() => _DoctorPickerDialogState();
+}
+
+class _DoctorPickerDialogState extends State<_DoctorPickerDialog> {
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set.from(widget.doctorIds); // all selected by default
+  }
+
+  bool get _allSelected => _selected.length == widget.doctorIds.length;
+
+  void _toggleAll() => setState(() {
+        _selected = _allSelected ? {} : Set.from(widget.doctorIds);
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Doctors'),
+      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Select All toggle
+            CheckboxListTile(
+              value: _allSelected,
+              tristate: false,
+              onChanged: (_) => _toggleAll(),
+              title: const Text('Select All',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            const Divider(height: 1),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.5,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: widget.doctorIds.map((id) {
+                    final doc = widget.doctors[id];
+                    return CheckboxListTile(
+                      value: _selected.contains(id),
+                      onChanged: (v) => setState(() {
+                        if (v == true) {
+                          _selected.add(id);
+                        } else {
+                          _selected.remove(id);
+                        }
+                      }),
+                      title: Text(doc != null ? 'Dr. ${doc.name}' : id),
+                      subtitle: doc?.clinicName != null &&
+                              doc!.clinicName!.isNotEmpty
+                          ? Text(doc.clinicName!)
+                          : null,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.pop(context, _selected),
+          child: Text('Export (${_selected.length})'),
+        ),
+      ],
+    );
+  }
 }
