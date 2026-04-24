@@ -44,8 +44,11 @@ class _Fonts {
 Future<Uint8List> generateReceipt(
   Bill bill,
   ScanType? scanType,
-  ReferralDoctor? referralDoctor,
-) async {
+  ReferralDoctor? referralDoctor, {
+  String header1 = 'Sahyadri Scan and Diagnostics',
+  String header2 = 'Scan and Diagnostics Centre',
+  String footer  = 'Thank you for visiting Sahyadri Scan and Diagnostics',
+}) async {
   final f = await _loadFonts();
   final pdf = pw.Document();
 
@@ -59,15 +62,11 @@ Future<Uint8List> generateReceipt(
           pw.Center(
             child: pw.Column(
               children: [
-                pw.Text(
-                  'Sahyadri Scan and Diagnostics',
-                  style: f.style(fontSize: 20, isBold: true),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  'Scan and Diagnostics Centre',
-                  style: f.style(fontSize: 11),
-                ),
+                pw.Text(header1, style: f.style(fontSize: 20, isBold: true)),
+                if (header2.isNotEmpty) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Text(header2, style: f.style(fontSize: 11)),
+                ],
               ],
             ),
           ),
@@ -111,10 +110,7 @@ Future<Uint8List> generateReceipt(
           pw.SizedBox(height: 8),
 
           pw.Center(
-            child: pw.Text(
-              'Thank you for visiting Sahyadri Scan and Diagnostics',
-              style: f.style(fontSize: 10),
-            ),
+            child: pw.Text(footer, style: f.style(fontSize: 10)),
           ),
         ],
       ),

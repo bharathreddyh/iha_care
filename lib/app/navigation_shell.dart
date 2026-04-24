@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../screens/billing/bill_settings_screen.dart';
 import '../screens/billing/billing_dashboard_screen.dart';
 import '../screens/billing/bill_history_screen.dart';
 import '../screens/billing/incentive_report_screen.dart';
@@ -112,6 +113,12 @@ class _ReceptionistShellState extends State<_ReceptionistShell> {
                             tooltip: 'Scan Types',
                             onPressed: () =>
                                 _push(context, const ScanTypesScreen()),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.receipt_outlined),
+                            tooltip: 'Bill Settings',
+                            onPressed: () =>
+                                _push(context, const BillSettingsScreen()),
                           ),
                           IconButton(
                             icon: const Icon(Icons.assessment_outlined),

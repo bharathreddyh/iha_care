@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/billing/bill.dart';
 import '../../models/billing/referral_doctor.dart';
 import '../../models/billing/scan_type.dart';
+import '../../services/app_settings_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
 import '../../utils/pdf_generator.dart';
@@ -21,13 +23,22 @@ class ReceiptPreviewScreen extends StatelessWidget {
   });
 
   Future<void> _printOrShare(BuildContext context) async {
-    final bytes = await generateReceipt(bill, scanType, referralDoctor);
+    final s = context.read<AppSettingsService>();
+    final bytes = await generateReceipt(
+      bill,
+      scanType,
+      referralDoctor,
+      header1: s.receiptHeader1,
+      header2: s.receiptHeader2,
+      footer:  s.receiptFooter,
+    );
     await Printing.sharePdf(bytes: bytes, filename: 'receipt_${bill.id}.pdf');
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = context.watch<AppSettingsService>();
 
     return Scaffold(
       appBar: AppBar(
@@ -55,15 +66,18 @@ class ReceiptPreviewScreen extends StatelessWidget {
                       child: Column(
                         children: [
                           Text(
-                            'Sahyadri Scan and Diagnostics',
+                            s.receiptHeader1,
                             style: theme.textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
+                            textAlign: TextAlign.center,
                           ),
-                          Text(
-                            'Scan and Diagnostics Centre',
-                            style: theme.textTheme.bodySmall,
-                          ),
+                          if (s.receiptHeader2.isNotEmpty)
+                            Text(
+                              s.receiptHeader2,
+                              style: theme.textTheme.bodySmall,
+                              textAlign: TextAlign.center,
+                            ),
                         ],
                       ),
                     ),
@@ -107,8 +121,9 @@ class ReceiptPreviewScreen extends StatelessWidget {
                     const Divider(height: 24),
                     Center(
                       child: Text(
-                        'Thank you for visiting Sahyadri Scan and Diagnostics',
+                        s.receiptFooter,
                         style: theme.textTheme.bodySmall,
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ],
