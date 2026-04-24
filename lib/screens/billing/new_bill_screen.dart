@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/billing/bill.dart';
@@ -278,6 +279,7 @@ class NewBillScreenState extends State<NewBillScreen> {
                         ),
                       ),
                       keyboardType: TextInputType.datetime,
+                      inputFormatters: [_DateInputFormatter()],
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) return null;
                         return _dobToDicom(v) == null
@@ -719,6 +721,32 @@ class _ManageQuickPricesSheetState extends State<_ManageQuickPricesSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Date auto-slash formatter (DD/MM/YYYY) ────────────────────────────────────
+
+class _DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    // Strip everything except digits
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Cap at 8 digits (DDMMYYYY)
+    final capped = digits.length > 8 ? digits.substring(0, 8) : digits;
+
+    final buf = StringBuffer();
+    for (var i = 0; i < capped.length; i++) {
+      if (i == 2 || i == 4) buf.write('/');
+      buf.write(capped[i]);
+    }
+
+    final text = buf.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }
