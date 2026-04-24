@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 9,
+      version: 10,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -243,6 +243,15 @@ class DatabaseHelper {
         ''');
       } catch (_) {}
     }
+    if (oldVersion < 10) {
+      // Prefix all USG scan type names with "USG "
+      // Handle 'MSK USG' specially (trailing USG → leading USG)
+      await db.execute(
+          "UPDATE scan_types SET name = 'USG MSK', synced = 0 WHERE id = 'st_014'");
+      await db.execute(
+          "UPDATE scan_types SET name = 'USG ' || name, synced = 0 "
+          "WHERE modality = 'US' AND name NOT LIKE 'USG%'");
+    }
     if (oldVersion < 9) {
       final newTypes = [
         {'id': 'st_ct_001', 'name': 'CT Abdomen',   'price': 3000.0, 'category': 'CT',    'modality': 'CT'},
@@ -272,20 +281,20 @@ class DatabaseHelper {
 
   Future<void> _seedScanTypes(Database db) async {
     final seeds = [
-      {'id': 'st_001', 'name': 'OB Scan', 'price': 800.0, 'category': 'OB-GYN'},
-      {'id': 'st_002', 'name': 'TVS', 'price': 1200.0, 'category': 'OB-GYN'},
-      {'id': 'st_003', 'name': 'NT Scan', 'price': 1500.0, 'category': 'OB-GYN'},
-      {'id': 'st_004', 'name': 'Anomaly Scan', 'price': 2000.0, 'category': 'OB-GYN'},
-      {'id': 'st_005', 'name': 'Growth Scan', 'price': 1000.0, 'category': 'OB-GYN'},
-      {'id': 'st_006', 'name': 'Doppler', 'price': 1800.0, 'category': 'OB-GYN'},
-      {'id': 'st_007', 'name': 'Abdomen', 'price': 700.0, 'category': 'General'},
-      {'id': 'st_008', 'name': 'Pelvis', 'price': 800.0, 'category': 'General'},
-      {'id': 'st_009', 'name': 'KUB', 'price': 700.0, 'category': 'General'},
-      {'id': 'st_010', 'name': 'Thyroid', 'price': 600.0, 'category': 'Small Parts'},
-      {'id': 'st_011', 'name': 'Breast', 'price': 800.0, 'category': 'Small Parts'},
-      {'id': 'st_012', 'name': 'Scrotal', 'price': 700.0, 'category': 'Small Parts'},
-      {'id': 'st_013', 'name': 'Neck', 'price': 600.0, 'category': 'Small Parts'},
-      {'id': 'st_014', 'name': 'MSK USG',       'price': 900.0,  'category': 'MSK',    'modality': 'US'},
+      {'id': 'st_001', 'name': 'USG OB Scan',     'price': 800.0,  'category': 'OB-GYN',      'modality': 'US'},
+      {'id': 'st_002', 'name': 'USG TVS',          'price': 1200.0, 'category': 'OB-GYN',      'modality': 'US'},
+      {'id': 'st_003', 'name': 'USG NT Scan',      'price': 1500.0, 'category': 'OB-GYN',      'modality': 'US'},
+      {'id': 'st_004', 'name': 'USG Anomaly Scan', 'price': 2000.0, 'category': 'OB-GYN',      'modality': 'US'},
+      {'id': 'st_005', 'name': 'USG Growth Scan',  'price': 1000.0, 'category': 'OB-GYN',      'modality': 'US'},
+      {'id': 'st_006', 'name': 'USG Doppler',      'price': 1800.0, 'category': 'OB-GYN',      'modality': 'US'},
+      {'id': 'st_007', 'name': 'USG Abdomen',      'price': 700.0,  'category': 'General',      'modality': 'US'},
+      {'id': 'st_008', 'name': 'USG Pelvis',       'price': 800.0,  'category': 'General',      'modality': 'US'},
+      {'id': 'st_009', 'name': 'USG KUB',          'price': 700.0,  'category': 'General',      'modality': 'US'},
+      {'id': 'st_010', 'name': 'USG Thyroid',      'price': 600.0,  'category': 'Small Parts',  'modality': 'US'},
+      {'id': 'st_011', 'name': 'USG Breast',       'price': 800.0,  'category': 'Small Parts',  'modality': 'US'},
+      {'id': 'st_012', 'name': 'USG Scrotal',      'price': 700.0,  'category': 'Small Parts',  'modality': 'US'},
+      {'id': 'st_013', 'name': 'USG Neck',         'price': 600.0,  'category': 'Small Parts',  'modality': 'US'},
+      {'id': 'st_014', 'name': 'USG MSK',          'price': 900.0,  'category': 'MSK',          'modality': 'US'},
       {'id': 'st_ct_001', 'name': 'CT Abdomen',  'price': 3000.0, 'category': 'CT',     'modality': 'CT'},
       {'id': 'st_ct_002', 'name': 'CT Chest',    'price': 3000.0, 'category': 'CT',     'modality': 'CT'},
       {'id': 'st_ct_003', 'name': 'CT Brain',    'price': 3500.0, 'category': 'CT',     'modality': 'CT'},
