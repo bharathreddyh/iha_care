@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../models/billing/bill.dart';
 import '../models/billing/incentive_record.dart';
@@ -10,11 +11,42 @@ import '../models/billing/scan_type.dart';
 import 'currency_formatter.dart';
 import 'date_formatter.dart';
 
+// ── Font loader (Noto Sans — full Unicode including ₹) ────────────────────────
+
+Future<_Fonts> _loadFonts() async {
+  final regular = await PdfGoogleFonts.notoSansRegular();
+  final bold = await PdfGoogleFonts.notoSansBold();
+  final italic = await PdfGoogleFonts.notoSansItalic();
+  return _Fonts(regular: regular, bold: bold, italic: italic);
+}
+
+class _Fonts {
+  final pw.Font regular;
+  final pw.Font bold;
+  final pw.Font italic;
+  const _Fonts({required this.regular, required this.bold, required this.italic});
+
+  pw.TextStyle style({
+    double fontSize = 10,
+    bool isBold = false,
+    bool isItalic = false,
+    PdfColor? color,
+  }) =>
+      pw.TextStyle(
+        font: isBold ? bold : (isItalic ? italic : regular),
+        fontSize: fontSize,
+        color: color,
+      );
+}
+
+// ── Receipt ───────────────────────────────────────────────────────────────────
+
 Future<Uint8List> generateReceipt(
   Bill bill,
   ScanType? scanType,
   ReferralDoctor? referralDoctor,
 ) async {
+  final f = await _loadFonts();
   final pdf = pw.Document();
 
   pdf.addPage(
@@ -24,21 +56,17 @@ Future<Uint8List> generateReceipt(
       build: (ctx) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          // Header
           pw.Center(
             child: pw.Column(
               children: [
                 pw.Text(
                   'IHA Care USG Centre',
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+                  style: f.style(fontSize: 20, isBold: true),
                 ),
                 pw.SizedBox(height: 4),
                 pw.Text(
                   'Diagnostic Ultrasound Services',
-                  style: const pw.TextStyle(fontSize: 11),
+                  style: f.style(fontSize: 11),
                 ),
               ],
             ),
@@ -46,45 +74,38 @@ Future<Uint8List> generateReceipt(
           pw.Divider(thickness: 1.5),
           pw.SizedBox(height: 8),
 
-          // Bill details
-          _row('Bill No', bill.id),
-          _row('Date', formatDateTime(bill.createdAt)),
+          _row('Bill No', bill.id, f),
+          _row('Date', formatDateTime(bill.createdAt), f),
           pw.SizedBox(height: 6),
           pw.Divider(),
           pw.SizedBox(height: 6),
 
-          // Patient
-          _row('Patient Name', bill.patientName),
+          _row('Patient Name', bill.patientName, f),
           if (bill.patientId != null && bill.patientId!.isNotEmpty)
-            _row('Patient ID', bill.patientId!),
+            _row('Patient ID', bill.patientId!, f),
           if (bill.patientPhone != null && bill.patientPhone!.isNotEmpty)
-            _row('Phone', bill.patientPhone!),
+            _row('Phone', bill.patientPhone!, f),
           pw.SizedBox(height: 6),
           pw.Divider(),
           pw.SizedBox(height: 6),
 
-          // Scan
-          _row('Scan Type', scanType?.name ?? 'N/A'),
-          _row('Scan Fee', formatCurrency(bill.scanFee)),
-          if (bill.discount > 0) _row('Discount', '- ${formatCurrency(bill.discount)}'),
+          _row('Scan Type', scanType?.name ?? 'N/A', f),
+          _row('Scan Fee', formatCurrency(bill.scanFee), f),
+          if (bill.discount > 0)
+            _row('Discount', '- ${formatCurrency(bill.discount)}', f),
           pw.SizedBox(height: 4),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text(
-                'Total Amount',
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
-              ),
-              pw.Text(
-                formatCurrency(bill.finalAmount),
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
-              ),
+              pw.Text('Total Amount', style: f.style(fontSize: 13, isBold: true)),
+              pw.Text(formatCurrency(bill.finalAmount),
+                  style: f.style(fontSize: 13, isBold: true)),
             ],
           ),
           pw.SizedBox(height: 4),
-          _row('Payment Mode', bill.paymentMode),
+          _row('Payment Mode', bill.paymentMode, f),
           if (referralDoctor != null)
-            _row('Referred By', 'Dr. ${referralDoctor.name}'),
+            _row('Referred By', 'Dr. ${referralDoctor.name}', f),
           pw.SizedBox(height: 8),
           pw.Divider(),
           pw.SizedBox(height: 8),
@@ -92,7 +113,7 @@ Future<Uint8List> generateReceipt(
           pw.Center(
             child: pw.Text(
               'Thank you for visiting IHA Care',
-              style: const pw.TextStyle(fontSize: 10),
+              style: f.style(fontSize: 10),
             ),
           ),
         ],
@@ -103,11 +124,14 @@ Future<Uint8List> generateReceipt(
   return pdf.save();
 }
 
+// ── Incentive report ──────────────────────────────────────────────────────────
+
 Future<Uint8List> generateIncentiveReport(
   List<IncentiveRecord> records,
   Map<String, ReferralDoctor> doctors,
   String month,
 ) async {
+  final f = await _loadFonts();
   final pdf = pw.Document();
 
   pdf.addPage(
@@ -129,12 +153,9 @@ Future<Uint8List> generateIncentiveReport(
           children: [
             pw.Text(
               'IHA Care — Referral Incentive Report',
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+              style: f.style(fontSize: 16, isBold: true),
             ),
-            pw.Text(
-              formatMonthYear(month),
-              style: const pw.TextStyle(fontSize: 12),
-            ),
+            pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
             pw.SizedBox(height: 16),
             pw.Table(
               border: pw.TableBorder.all(),
@@ -146,7 +167,8 @@ Future<Uint8List> generateIncentiveReport(
                 4: const pw.FlexColumnWidth(2),
               },
               children: [
-                _tableHeader(['Doctor / Scan', 'Clinic', 'Referrals', 'Billed (₹)', 'Incentive (₹)']),
+                _tableHeader(
+                    ['Doctor / Scan', 'Clinic', 'Referrals', 'Billed (₹)', 'Incentive (₹)'], f),
                 ...records.expand((r) {
                   final doc = doctors[r.referralDoctorId];
                   return [
@@ -156,8 +178,7 @@ Future<Uint8List> generateIncentiveReport(
                       r.referralCount.toString(),
                       formatCurrency(r.totalBilled),
                       formatCurrency(r.incentiveAmount),
-                    ]),
-                    // Breakdown sub-rows, one per scan type
+                    ], f),
                     ...r.breakdown.map((b) => _tableRow(
                       [
                         '  └ ${b.scanTypeName}',
@@ -166,12 +187,15 @@ Future<Uint8List> generateIncentiveReport(
                         '',
                         formatCurrency(b.total),
                       ],
+                      f,
                       isBreakdown: true,
                     )),
                   ];
                 }),
                 _tableRow(
-                  ['TOTAL', '', totalReferrals.toInt().toString(), formatCurrency(totalBilled), formatCurrency(totalIncentive)],
+                  ['TOTAL', '', totalReferrals.toInt().toString(),
+                    formatCurrency(totalBilled), formatCurrency(totalIncentive)],
+                  f,
                   bold: true,
                 ),
               ],
@@ -185,12 +209,15 @@ Future<Uint8List> generateIncentiveReport(
   return pdf.save();
 }
 
+// ── Monthly report ────────────────────────────────────────────────────────────
+
 Future<Uint8List> generateMonthlyReport({
   required String month,
   required Map<String, dynamic> data,
   required bool includeExcluded,
   required bool includeCancelled,
 }) async {
+  final f = await _loadFonts();
   final pdf = pw.Document();
 
   final scanVolume = (data['scanVolume'] as List).cast<Map<String, dynamic>>();
@@ -209,29 +236,23 @@ Future<Uint8List> generateMonthlyReport({
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
       build: (ctx) => [
-        pw.Text(
-          'IHA Care — Monthly Report',
-          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.Text(
-          formatMonthYear(month),
-          style: const pw.TextStyle(fontSize: 12),
-        ),
+        pw.Text('IHA Care — Monthly Report',
+            style: f.style(fontSize: 16, isBold: true)),
+        pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
         pw.SizedBox(height: 4),
         pw.Text(
           'Generated ${formatDateTime(DateTime.now().toIso8601String())}',
-          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+          style: f.style(fontSize: 9, color: PdfColors.grey700),
         ),
         pw.SizedBox(height: 4),
         pw.Text(
           'Filters: '
           '${includeExcluded ? "incl. excluded" : "excl. excluded"}, '
           '${includeCancelled ? "incl. cancelled" : "excl. cancelled"}',
-          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+          style: f.style(fontSize: 9, color: PdfColors.grey700),
         ),
         pw.SizedBox(height: 16),
 
-        // Summary block
         pw.Container(
           padding: const pw.EdgeInsets.all(10),
           decoration: pw.BoxDecoration(
@@ -241,22 +262,21 @@ Future<Uint8List> generateMonthlyReport({
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _row('Total Bills', totalCount.toString()),
-              _row('Gross Revenue', formatCurrency(totalRevenue)),
-              _row('Total Discount', formatCurrency(totalDiscount)),
-              _row('PCPNDT Form-F Count', pcpdntCount.toString()),
+              _row('Total Bills', totalCount.toString(), f),
+              _row('Gross Revenue', formatCurrency(totalRevenue), f),
+              _row('Total Discount', formatCurrency(totalDiscount), f),
+              _row('PCPNDT Form-F Count', pcpdntCount.toString(), f),
               if (excludedCount > 0)
                 _row('Excluded from this report',
-                    '$excludedCount bills · ${formatCurrency(excludedRevenue)}'),
+                    '$excludedCount bills · ${formatCurrency(excludedRevenue)}', f),
               if (cancelledCount > 0)
-                _row('Cancelled this month', '$cancelledCount bills'),
+                _row('Cancelled this month', '$cancelledCount bills', f),
             ],
           ),
         ),
         pw.SizedBox(height: 16),
 
-        pw.Text('Scan Volume',
-            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+        pw.Text('Scan Volume', style: f.style(fontSize: 13, isBold: true)),
         pw.SizedBox(height: 6),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey400),
@@ -266,20 +286,18 @@ Future<Uint8List> generateMonthlyReport({
             2: const pw.FlexColumnWidth(2),
           },
           children: [
-            _tableHeader(['Scan Type', 'Count', 'Revenue']),
-            if (scanVolume.isEmpty)
-              _tableRow(['No data', '', '']),
+            _tableHeader(['Scan Type', 'Count', 'Revenue'], f),
+            if (scanVolume.isEmpty) _tableRow(['No data', '', ''], f),
             ...scanVolume.map((r) => _tableRow([
                   (r['name'] as String?) ?? 'Unknown',
                   ((r['cnt'] as int?) ?? 0).toString(),
                   formatCurrency((r['revenue'] as num? ?? 0).toDouble()),
-                ])),
+                ], f)),
           ],
         ),
         pw.SizedBox(height: 16),
 
-        pw.Text('Payment Mode Split',
-            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+        pw.Text('Payment Mode Split', style: f.style(fontSize: 13, isBold: true)),
         pw.SizedBox(height: 6),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey400),
@@ -289,16 +307,16 @@ Future<Uint8List> generateMonthlyReport({
             2: const pw.FlexColumnWidth(2),
           },
           children: [
-            _tableHeader(['Mode', 'Count', 'Total']),
-            if (paymentSplit.isEmpty)
-              _tableRow(['No data', '', '']),
+            _tableHeader(['Mode', 'Count', 'Total'], f),
+            if (paymentSplit.isEmpty) _tableRow(['No data', '', ''], f),
             ...paymentSplit.map((r) => _tableRow([
                   (r['payment_mode'] as String?) ?? '-',
                   ((r['cnt'] as int?) ?? 0).toString(),
                   formatCurrency((r['total'] as num? ?? 0).toDouble()),
-                ])),
+                ], f)),
             _tableRow(
               ['TOTAL', totalCount.toString(), formatCurrency(totalRevenue)],
+              f,
               bold: true,
             ),
           ],
@@ -310,48 +328,46 @@ Future<Uint8List> generateMonthlyReport({
   return pdf.save();
 }
 
-pw.Widget _row(String label, String value) => pw.Padding(
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+pw.Widget _row(String label, String value, _Fonts f) => pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
-          pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+          pw.Text(label, style: f.style(fontSize: 10)),
+          pw.Text(value, style: f.style(fontSize: 10)),
         ],
       ),
     );
 
-pw.TableRow _tableHeader(List<String> cells) => pw.TableRow(
+pw.TableRow _tableHeader(List<String> cells, _Fonts f) => pw.TableRow(
       decoration: const pw.BoxDecoration(color: PdfColors.grey300),
       children: cells
-          .map(
-            (c) => pw.Padding(
-              padding: const pw.EdgeInsets.all(6),
-              child: pw.Text(c, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-            ),
-          )
+          .map((c) => pw.Padding(
+                padding: const pw.EdgeInsets.all(6),
+                child: pw.Text(c, style: f.style(fontSize: 9, isBold: true)),
+              ))
           .toList(),
     );
 
-pw.TableRow _tableRow(List<String> cells,
+pw.TableRow _tableRow(List<String> cells, _Fonts f,
         {bool bold = false, bool isBreakdown = false}) =>
     pw.TableRow(
       decoration: isBreakdown
           ? const pw.BoxDecoration(color: PdfColors.grey100)
           : null,
       children: cells
-          .map(
-            (c) => pw.Padding(
-              padding: const pw.EdgeInsets.all(6),
-              child: pw.Text(
-                c,
-                style: pw.TextStyle(
-                  fontSize: isBreakdown ? 8 : 9,
-                  fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-                  color: isBreakdown ? PdfColors.grey700 : PdfColors.black,
+          .map((c) => pw.Padding(
+                padding: const pw.EdgeInsets.all(6),
+                child: pw.Text(
+                  c,
+                  style: f.style(
+                    fontSize: isBreakdown ? 8 : 9,
+                    isBold: bold,
+                    color: isBreakdown ? PdfColors.grey700 : PdfColors.black,
+                  ),
                 ),
-              ),
-            ),
-          )
+              ))
           .toList(),
     );
