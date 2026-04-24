@@ -50,8 +50,12 @@ class _WorklistQueueScreenState extends State<WorklistQueueScreen> {
     final bills = results[0] as List<Bill>;
     final scanTypes = results[1] as List<ScanType>;
     // Show active (non-cancelled, non-completed) bills oldest-first
+    // Only USG scans go through the Samsung V6 MWL workflow
     final queue = bills
-        .where((b) => !b.isCancelled && !b.scanCompleted)
+        .where((b) =>
+            !b.isCancelled &&
+            !b.scanCompleted &&
+            (_scanTypes[b.scanTypeId]?.modality ?? 'US') == 'US')
         .toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     if (mounted) {

@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -243,6 +243,31 @@ class DatabaseHelper {
         ''');
       } catch (_) {}
     }
+    if (oldVersion < 9) {
+      final newTypes = [
+        {'id': 'st_ct_001', 'name': 'CT Abdomen',   'price': 3000.0, 'category': 'CT',    'modality': 'CT'},
+        {'id': 'st_ct_002', 'name': 'CT Chest',      'price': 3000.0, 'category': 'CT',    'modality': 'CT'},
+        {'id': 'st_ct_003', 'name': 'CT Brain',      'price': 3500.0, 'category': 'CT',    'modality': 'CT'},
+        {'id': 'st_ct_004', 'name': 'CT KUB',        'price': 3000.0, 'category': 'CT',    'modality': 'CT'},
+        {'id': 'st_ct_005', 'name': 'CT Spine',      'price': 3500.0, 'category': 'CT',    'modality': 'CT'},
+        {'id': 'st_mr_001', 'name': 'MRI Brain',     'price': 5000.0, 'category': 'MRI',   'modality': 'MR'},
+        {'id': 'st_mr_002', 'name': 'MRI Spine',     'price': 5000.0, 'category': 'MRI',   'modality': 'MR'},
+        {'id': 'st_mr_003', 'name': 'MRI Abdomen',   'price': 5000.0, 'category': 'MRI',   'modality': 'MR'},
+        {'id': 'st_mr_004', 'name': 'MRI Knee',      'price': 4500.0, 'category': 'MRI',   'modality': 'MR'},
+        {'id': 'st_mr_005', 'name': 'MRI Pelvis',    'price': 5000.0, 'category': 'MRI',   'modality': 'MR'},
+        {'id': 'st_xr_001', 'name': 'X-ray Chest',   'price': 300.0,  'category': 'X-ray', 'modality': 'CR'},
+        {'id': 'st_xr_002', 'name': 'X-ray KUB',     'price': 300.0,  'category': 'X-ray', 'modality': 'CR'},
+        {'id': 'st_xr_003', 'name': 'X-ray Spine',   'price': 400.0,  'category': 'X-ray', 'modality': 'CR'},
+        {'id': 'st_xr_004', 'name': 'X-ray PNS',     'price': 350.0,  'category': 'X-ray', 'modality': 'CR'},
+        {'id': 'st_xr_005', 'name': 'X-ray Knee',    'price': 300.0,  'category': 'X-ray', 'modality': 'CR'},
+      ];
+      for (final t in newTypes) {
+        try {
+          await db.insert('scan_types', {...t, 'is_active': 1, 'synced': 0},
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        } catch (_) {}
+      }
+    }
   }
 
   Future<void> _seedScanTypes(Database db) async {
@@ -260,13 +285,28 @@ class DatabaseHelper {
       {'id': 'st_011', 'name': 'Breast', 'price': 800.0, 'category': 'Small Parts'},
       {'id': 'st_012', 'name': 'Scrotal', 'price': 700.0, 'category': 'Small Parts'},
       {'id': 'st_013', 'name': 'Neck', 'price': 600.0, 'category': 'Small Parts'},
-      {'id': 'st_014', 'name': 'MSK USG', 'price': 900.0, 'category': 'MSK'},
+      {'id': 'st_014', 'name': 'MSK USG',       'price': 900.0,  'category': 'MSK',    'modality': 'US'},
+      {'id': 'st_ct_001', 'name': 'CT Abdomen',  'price': 3000.0, 'category': 'CT',     'modality': 'CT'},
+      {'id': 'st_ct_002', 'name': 'CT Chest',    'price': 3000.0, 'category': 'CT',     'modality': 'CT'},
+      {'id': 'st_ct_003', 'name': 'CT Brain',    'price': 3500.0, 'category': 'CT',     'modality': 'CT'},
+      {'id': 'st_ct_004', 'name': 'CT KUB',      'price': 3000.0, 'category': 'CT',     'modality': 'CT'},
+      {'id': 'st_ct_005', 'name': 'CT Spine',    'price': 3500.0, 'category': 'CT',     'modality': 'CT'},
+      {'id': 'st_mr_001', 'name': 'MRI Brain',   'price': 5000.0, 'category': 'MRI',    'modality': 'MR'},
+      {'id': 'st_mr_002', 'name': 'MRI Spine',   'price': 5000.0, 'category': 'MRI',    'modality': 'MR'},
+      {'id': 'st_mr_003', 'name': 'MRI Abdomen', 'price': 5000.0, 'category': 'MRI',    'modality': 'MR'},
+      {'id': 'st_mr_004', 'name': 'MRI Knee',    'price': 4500.0, 'category': 'MRI',    'modality': 'MR'},
+      {'id': 'st_mr_005', 'name': 'MRI Pelvis',  'price': 5000.0, 'category': 'MRI',    'modality': 'MR'},
+      {'id': 'st_xr_001', 'name': 'X-ray Chest', 'price': 300.0,  'category': 'X-ray',  'modality': 'CR'},
+      {'id': 'st_xr_002', 'name': 'X-ray KUB',   'price': 300.0,  'category': 'X-ray',  'modality': 'CR'},
+      {'id': 'st_xr_003', 'name': 'X-ray Spine', 'price': 400.0,  'category': 'X-ray',  'modality': 'CR'},
+      {'id': 'st_xr_004', 'name': 'X-ray PNS',   'price': 350.0,  'category': 'X-ray',  'modality': 'CR'},
+      {'id': 'st_xr_005', 'name': 'X-ray Knee',  'price': 300.0,  'category': 'X-ray',  'modality': 'CR'},
     ];
 
     for (final seed in seeds) {
       await db.insert(
         'scan_types',
-        {...seed, 'modality': 'US', 'is_active': 1},
+        {...seed, 'is_active': 1, 'synced': 0},
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
     }
