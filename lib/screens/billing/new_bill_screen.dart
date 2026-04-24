@@ -507,7 +507,7 @@ class NewBillScreenState extends State<NewBillScreen> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   icon: const Icon(Icons.receipt_long),
-                  label: const Text('Generate Bill & Push to MWL'),
+                  label: const Text('Generate Bill'),
                   onPressed: _saving ? null : _submit,
                 ),
               ),
