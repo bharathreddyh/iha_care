@@ -60,12 +60,12 @@ Future<Uint8List> generateReceipt(
             child: pw.Column(
               children: [
                 pw.Text(
-                  'IHA Care USG Centre',
+                  'Sahyadri Scan and Diagnostics',
                   style: f.style(fontSize: 20, isBold: true),
                 ),
                 pw.SizedBox(height: 4),
                 pw.Text(
-                  'Diagnostic Ultrasound Services',
+                  'Scan and Diagnostics Centre',
                   style: f.style(fontSize: 11),
                 ),
               ],
@@ -112,7 +112,7 @@ Future<Uint8List> generateReceipt(
 
           pw.Center(
             child: pw.Text(
-              'Thank you for visiting IHA Care',
+              'Thank you for visiting Sahyadri Scan and Diagnostics',
               style: f.style(fontSize: 10),
             ),
           ),
@@ -152,7 +152,7 @@ Future<Uint8List> generateIncentiveReport(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              'IHA Care — Referral Incentive Report',
+              'Sahyadri Scan and Diagnostics — Referral Incentive Report',
               style: f.style(fontSize: 16, isBold: true),
             ),
             pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
@@ -236,7 +236,7 @@ Future<Uint8List> generateMonthlyReport({
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
       build: (ctx) => [
-        pw.Text('IHA Care — Monthly Report',
+        pw.Text('Sahyadri Scan and Diagnostics — Monthly Report',
             style: f.style(fontSize: 16, isBold: true)),
         pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
         pw.SizedBox(height: 4),

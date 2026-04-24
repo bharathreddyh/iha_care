@@ -20,7 +20,7 @@ class RolePickerScreen extends StatelessWidget {
                 const Icon(Icons.local_hospital_outlined, size: 56),
                 const SizedBox(height: 16),
                 Text(
-                  'IHA Care',
+                  'Sahyadri Scan and Diagnostics',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),

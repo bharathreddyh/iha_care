@@ -55,13 +55,13 @@ class ReceiptPreviewScreen extends StatelessWidget {
                       child: Column(
                         children: [
                           Text(
-                            'IHA Care USG Centre',
+                            'Sahyadri Scan and Diagnostics',
                             style: theme.textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           Text(
-                            'Diagnostic Ultrasound Services',
+                            'Scan and Diagnostics Centre',
                             style: theme.textTheme.bodySmall,
                           ),
                         ],
@@ -107,7 +107,7 @@ class ReceiptPreviewScreen extends StatelessWidget {
                     const Divider(height: 24),
                     Center(
                       child: Text(
-                        'Thank you for visiting IHA Care',
+                        'Thank you for visiting Sahyadri Scan and Diagnostics',
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
