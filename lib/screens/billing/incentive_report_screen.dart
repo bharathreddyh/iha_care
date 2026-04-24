@@ -297,14 +297,32 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('$totalReferrals referrals'),
-                                Text(formatCurrency(totalBilled),
+                                Text('$totalReferrals referrals',
                                     style: const TextStyle(fontSize: 12)),
-                                Text(
-                                  formatCurrency(totalIncentive),
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16),
+                                const SizedBox(height: 2),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('Collection: ',
+                                        style: TextStyle(fontSize: 12)),
+                                    Text(formatCurrency(totalBilled),
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('Incentive: ',
+                                        style: TextStyle(fontSize: 13)),
+                                    Text(
+                                      formatCurrency(totalIncentive),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -342,10 +360,28 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(
-                                formatCurrency(r.incentiveAmount),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Collection: ',
+                                      style: Theme.of(context).textTheme.bodySmall),
+                                  Text(formatCurrency(r.totalBilled),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Incentive: ',
+                                      style: Theme.of(context).textTheme.bodySmall),
+                                  Text(formatCurrency(r.incentiveAmount),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14)),
+                                ],
                               ),
                               Text('${r.referralCount} referral${r.referralCount == 1 ? '' : 's'}',
                                   style: Theme.of(context).textTheme.bodySmall),
