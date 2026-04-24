@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/billing/bill.dart';
 import '../../models/billing/referral_doctor.dart';
 import '../../models/billing/scan_type.dart';
+import '../../services/app_settings_service.dart';
 import '../../services/billing_service.dart';
 import '../../services/inventory_service.dart';
 import '../../utils/currency_formatter.dart';
@@ -29,6 +30,7 @@ class NewBillScreenState extends State<NewBillScreen> {
   // Scan / billing
   ScanType? _selectedScan;
   ReferralDoctor? _selectedDoctor;
+  final _price = TextEditingController();
   final _discount = TextEditingController(text: '0');
   final _amountPaid = TextEditingController();
   String _paymentMode = 'Cash';
@@ -44,12 +46,13 @@ class NewBillScreenState extends State<NewBillScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _price.addListener(() {
+      setState(() {});
+      _amountPaid.text = _finalAmount.toStringAsFixed(0);
+    });
     _discount.addListener(() {
       setState(() {});
-      // Auto-fill amount paid with new total if user hasn't edited it
-      if (_amountPaid.text.isEmpty) {
-        _amountPaid.text = _finalAmount.toStringAsFixed(0);
-      }
+      _amountPaid.text = _finalAmount.toStringAsFixed(0);
     });
   }
 
@@ -78,13 +81,14 @@ class NewBillScreenState extends State<NewBillScreen> {
     _patientId.dispose();
     _patientDob.dispose();
     _patientPhone.dispose();
+    _price.dispose();
     _discount.dispose();
     _amountPaid.dispose();
     _notes.dispose();
     super.dispose();
   }
 
-  double get _scanFee => _selectedScan?.price ?? 0;
+  double get _scanFee => double.tryParse(_price.text) ?? _selectedScan?.price ?? 0;
   double get _discountAmt => double.tryParse(_discount.text) ?? 0;
   double get _finalAmount => (_scanFee - _discountAmt).clamp(0, double.infinity);
 
@@ -192,6 +196,7 @@ class NewBillScreenState extends State<NewBillScreen> {
     _patientId.clear();
     _patientDob.clear();
     _patientPhone.clear();
+    _price.clear();
     _discount.text = '0';
     _amountPaid.clear();
     _notes.clear();
@@ -321,6 +326,7 @@ class NewBillScreenState extends State<NewBillScreen> {
                 },
                 onSelected: (s) => setState(() {
                   _selectedScan = s;
+                  _price.text = s.price.toStringAsFixed(0);
                   _discount.text = '0';
                   _amountPaid.text = s.price.toStringAsFixed(0);
                 }),
@@ -393,20 +399,44 @@ class NewBillScreenState extends State<NewBillScreen> {
               _sectionTitle('Payment'),
               const SizedBox(height: 8),
 
+              // ── Price field ───────────────────────────────────────────────
+              TextFormField(
+                controller: _price,
+                decoration: InputDecoration(
+                  labelText: 'Price',
+                  prefixText: '₹ ',
+                  hintText: _selectedScan != null
+                      ? _selectedScan!.price.toStringAsFixed(0)
+                      : '0',
+                ),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  final p = double.tryParse(v ?? '');
+                  if (p == null || p < 0) return 'Enter a valid price';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+
+              // ── Quick-price chips ─────────────────────────────────────────
+              _QuickPriceChips(
+                price: _price,
+                onEditTap: () => _openManagePrices(context),
+              ),
+              const SizedBox(height: 12),
+
+              // ── Discount field ────────────────────────────────────────────
               TextFormField(
                 controller: _discount,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Discount',
                   prefixText: '₹ ',
-                  helperText: _selectedScan != null
-                      ? 'Scan fee: ${formatCurrency(_scanFee)}'
-                      : null,
                 ),
                 keyboardType: TextInputType.number,
                 validator: (v) {
                   final d = double.tryParse(v ?? '0') ?? 0;
                   if (d < 0) return 'Cannot be negative';
-                  if (d > _scanFee) return 'Discount exceeds scan fee';
+                  if (d > _scanFee) return 'Discount exceeds price';
                   return null;
                 },
               ),
@@ -526,4 +556,169 @@ class NewBillScreenState extends State<NewBillScreen> {
             .titleMedium
             ?.copyWith(fontWeight: FontWeight.bold),
       );
+
+  void _openManagePrices(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _ManageQuickPricesSheet(),
+    );
+  }
+}
+
+// ── Quick-price chip row ───────────────────────────────────────────────────────
+
+class _QuickPriceChips extends StatelessWidget {
+  final TextEditingController price;
+  final VoidCallback onEditTap;
+
+  const _QuickPriceChips({required this.price, required this.onEditTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final quickPrices = context.watch<AppSettingsService>().quickPrices;
+    final currentPrice = price.text;
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: [
+        ...quickPrices.map((p) {
+          final label = '₹${p.toString()}';
+          final selected = currentPrice == p.toString();
+          return ChoiceChip(
+            label: Text(label),
+            selected: selected,
+            onSelected: (_) => price.text = p.toString(),
+          );
+        }),
+        ActionChip(
+          avatar: const Icon(Icons.edit_outlined, size: 14),
+          label: const Text('Edit'),
+          onPressed: onEditTap,
+        ),
+      ],
+    );
+  }
+}
+
+// ── Manage quick prices bottom sheet ──────────────────────────────────────────
+
+class _ManageQuickPricesSheet extends StatefulWidget {
+  const _ManageQuickPricesSheet();
+
+  @override
+  State<_ManageQuickPricesSheet> createState() =>
+      _ManageQuickPricesSheetState();
+}
+
+class _ManageQuickPricesSheetState extends State<_ManageQuickPricesSheet> {
+  late List<int> _prices;
+  final _addCtrl = TextEditingController();
+  final _addKey = GlobalKey<FormFieldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _prices = [...context.read<AppSettingsService>().quickPrices];
+  }
+
+  @override
+  void dispose() {
+    _addCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    await context.read<AppSettingsService>().setQuickPrices(_prices);
+    if (mounted) Navigator.pop(context);
+  }
+
+  void _addPrice() {
+    if (!(_addKey.currentState?.validate() ?? false)) return;
+    final val = int.tryParse(_addCtrl.text.trim());
+    if (val == null || val <= 0) return;
+    if (_prices.contains(val)) {
+      _addCtrl.clear();
+      return;
+    }
+    setState(() {
+      _prices.add(val);
+      _prices.sort();
+      _addCtrl.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Quick Prices',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              const Spacer(),
+              TextButton(onPressed: _save, child: const Text('Done')),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_prices.isEmpty)
+            const Text('No prices added yet.',
+                style: TextStyle(color: Colors.grey))
+          else
+            ..._prices.map((p) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('₹ $p'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.remove_circle_outline,
+                        color: Colors.red),
+                    onPressed: _prices.length > 1
+                        ? () => setState(() => _prices.remove(p))
+                        : null,
+                    tooltip: _prices.length > 1 ? 'Remove' : 'Need at least one',
+                  ),
+                )),
+          const Divider(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  key: _addKey,
+                  controller: _addCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Add price',
+                    prefixText: '₹ ',
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                  onFieldSubmitted: (_) => _addPrice(),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    final n = int.tryParse(v.trim());
+                    if (n == null || n <= 0) return 'Enter a positive number';
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: _addPrice, child: const Text('Add')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
