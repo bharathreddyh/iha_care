@@ -148,7 +148,7 @@ class _ScanTypesScreenState extends State<ScanTypesScreen> {
                                     : TextDecoration.lineThrough,
                               ),
                             ),
-                            subtitle: Text(formatCurrency(scan.price)),
+                            subtitle: Text('${formatCurrency(scan.price)}  ·  ${scan.modality}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -200,6 +200,7 @@ class _ScanTypeFormState extends State<_ScanTypeForm> {
   late final TextEditingController _name;
   late final TextEditingController _price;
   late String _category;
+  late String _modality;
   late bool _isActive;
   bool _saving = false;
 
@@ -210,6 +211,7 @@ class _ScanTypeFormState extends State<_ScanTypeForm> {
     _name = TextEditingController(text: s?.name ?? '');
     _price = TextEditingController(text: s?.price.toStringAsFixed(0) ?? '');
     _category = s?.category ?? widget.categories.first;
+    _modality = s?.modality ?? 'US';
     _isActive = s?.isActive ?? true;
   }
 
@@ -228,7 +230,7 @@ class _ScanTypeFormState extends State<_ScanTypeForm> {
       name: _name.text.trim(),
       price: double.tryParse(_price.text) ?? 0,
       category: _category,
-      modality: widget.existing?.modality ?? 'US',
+      modality: _modality,
       isActive: _isActive,
     );
     await widget.onSave(scan);
@@ -285,6 +287,21 @@ class _ScanTypeFormState extends State<_ScanTypeForm> {
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
                 onChanged: (v) => setState(() => _category = v ?? _category),
+              ),
+              const SizedBox(height: 16),
+              Text('Modality', style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'US',  label: Text('USG')),
+                  ButtonSegment(value: 'CT',  label: Text('CT')),
+                  ButtonSegment(value: 'MRI', label: Text('MRI')),
+                  ButtonSegment(value: 'XR',  label: Text('X-Ray')),
+                ],
+                selected: {_modality},
+                onSelectionChanged: (s) =>
+                    setState(() => _modality = s.first),
+                showSelectedIcon: false,
               ),
               const SizedBox(height: 8),
               SwitchListTile(
