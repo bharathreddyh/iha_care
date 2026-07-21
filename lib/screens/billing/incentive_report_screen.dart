@@ -26,6 +26,8 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
 
   List<IncentiveRecord> _records = [];
   Map<String, ReferralDoctor> _doctors = {};
+  // Per-doctor list of individual bills (patient, date, scan, incentive)
+  Map<String, List<Map<String, dynamic>>> _detailByDoctor = {};
   bool _loading = false;
   bool _exporting = false;
   bool _exportingExcel = false;
@@ -47,10 +49,21 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
     final records = await service.calculateMonthlyIncentives(_monthKey);
     final allDocs = await service.getReferralDoctors();
     final docMap = {for (final d in allDocs) d.id: d};
+
+    // Per-bill detail rows, grouped by doctor
+    final detailRows = await service.getReferralDetailForMonth(_monthKey);
+    final detailByDoctor = <String, List<Map<String, dynamic>>>{};
+    for (final row in detailRows) {
+      detailByDoctor
+          .putIfAbsent(row['referral_doctor_id'] as String, () => [])
+          .add(row);
+    }
+
     if (mounted) {
       setState(() {
         _records = records;
         _doctors = docMap;
+        _detailByDoctor = detailByDoctor;
         _loading = false;
       });
     }
@@ -401,22 +414,25 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                         ],
                       ),
                       children: [
-                        if (r.breakdown.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text(
-                              'No rate breakdown available.\nTap recalculate to see details.',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          )
-                        else
-                          Padding(
+                        Builder(builder: (context) {
+                          final bills =
+                              _detailByDoctor[r.referralDoctorId] ?? const [];
+                          if (bills.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text(
+                                'No bill details available.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            );
+                          }
+                          return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                             child: Table(
                               columnWidths: const {
                                 0: FlexColumnWidth(3),
-                                1: FlexColumnWidth(1),
-                                2: FlexColumnWidth(2),
+                                1: FlexColumnWidth(2),
+                                2: FlexColumnWidth(3),
                                 3: FlexColumnWidth(2),
                               },
                               children: [
@@ -427,21 +443,28 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                                         .surfaceContainerHighest,
                                   ),
                                   children: [
+                                    _cell('Patient', bold: true),
+                                    _cell('Date', bold: true),
                                     _cell('Scan', bold: true),
-                                    _cell('Count', bold: true),
-                                    _cell('Rate', bold: true),
-                                    _cell('Total', bold: true),
+                                    _cell('Incentive', bold: true),
                                   ],
                                 ),
-                                ...r.breakdown.map((b) => TableRow(children: [
-                                      _cell(b.scanTypeName),
-                                      _cell(b.count.toString()),
-                                      _cell(formatCurrency(b.rate)),
-                                      _cell(formatCurrency(b.total)),
+                                ...bills.map((b) => TableRow(children: [
+                                      _cell((b['patient_name'] as String?) ??
+                                          '—'),
+                                      _cell(formatDate(
+                                          (b['created_at'] as String?) ?? '')),
+                                      _cell(
+                                          (b['scan_type_name'] as String?) ??
+                                              'Unknown'),
+                                      _cell(formatCurrency(
+                                          (b['incentive_rate'] as num? ?? 0)
+                                              .toDouble())),
                                     ])),
                               ],
                             ),
-                          ),
+                          );
+                        }),
                         if (r.paymentStatus == 'unpaid')
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
