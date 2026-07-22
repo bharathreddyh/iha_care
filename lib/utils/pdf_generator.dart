@@ -149,6 +149,9 @@ Future<Uint8List> generateIncentiveReport({
     final doctorName =
         doctor != null ? 'Dr. ${doctor.name}' : doctorId;
 
+    // Each doctor starts on a fresh page (first doctor uses the first page).
+    if (docSections.isNotEmpty) docSections.add(pw.NewPage());
+
     double doctorTotal = 0;
     final dataRows = <pw.TableRow>[];
     for (final r in doctorRows) {
@@ -207,19 +210,19 @@ Future<Uint8List> generateIncentiveReport({
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
-      header: (ctx) => ctx.pageNumber == 1
-          ? pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'Sahyadri Scan and Diagnostics — Referral Incentive Report',
-                  style: f.style(fontSize: 16, isBold: true),
-                ),
-                pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
-                pw.SizedBox(height: 8),
-              ],
-            )
-          : pw.SizedBox(),
+      // Header repeats on every page so each doctor's page is self-contained.
+      header: (ctx) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'Sahyadri Scan and Diagnostics — Referral Incentive Report',
+            style: f.style(fontSize: 16, isBold: true),
+          ),
+          pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
+          pw.Divider(thickness: 0.5, color: PdfColors.grey400),
+          pw.SizedBox(height: 4),
+        ],
+      ),
       build: (ctx) => docSections.isEmpty
           ? [
               pw.Center(
