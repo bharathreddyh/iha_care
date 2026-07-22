@@ -47,6 +47,31 @@ class AuthService extends ChangeNotifier {
     return _fetchCentres();
   }
 
+  /// Registers a new account. Returns true if the user is immediately signed in
+  /// (email confirmation disabled), false if they must confirm their email first.
+  Future<bool> signUp(String email, String password) async {
+    final res = await _client.auth.signUp(email: email, password: password);
+    final signedIn = res.session != null;
+    if (signedIn) notifyListeners();
+    return signedIn;
+  }
+
+  /// Creates a new centre owned by the currently signed-in user and returns it.
+  /// Requires an active session (see [signUp]).
+  Future<AppCentre> createCentre(String name, String code) async {
+    final result = await _client.rpc(
+      'create_centre_for_current_user',
+      params: {'p_name': name, 'p_code': code},
+    );
+    final row = (result as List).first as Map<String, dynamic>;
+    return AppCentre(
+      id: row['id'] as String,
+      name: row['name'] as String,
+      code: row['code'] as String,
+      role: row['role'] as String,
+    );
+  }
+
   Future<List<AppCentre>> _fetchCentres() async {
     final response = await _client
         .from('centre_members')

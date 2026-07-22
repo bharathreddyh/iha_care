@@ -228,3 +228,50 @@ ALTER TABLE bills ADD COLUMN IF NOT EXISTS dispatched     BOOLEAN DEFAULT false;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at   TIMESTAMPTZ;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancel_reason    TEXT;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS report_excluded  BOOLEAN DEFAULT false;
+
+-- ── Self-service sign-up ──────────────────────────────────────────────────────
+-- Lets a newly registered user create their own centre + owner membership.
+-- SECURITY DEFINER so it can insert past the SELECT-only RLS on these tables.
+
+CREATE OR REPLACE FUNCTION public.create_centre_for_current_user(
+  p_name text,
+  p_code text
+)
+RETURNS TABLE (id uuid, name text, code text, role text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_centre_id uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  p_code := upper(trim(p_code));
+  p_name := trim(p_name);
+
+  IF p_name = '' OR p_code = '' THEN
+    RAISE EXCEPTION 'Centre name and code are required';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM centres c WHERE c.code = p_code) THEN
+    RAISE EXCEPTION 'CENTRE_CODE_TAKEN';
+  END IF;
+
+  INSERT INTO centres (name, code)
+  VALUES (p_name, p_code)
+  RETURNING centres.id INTO v_centre_id;
+
+  INSERT INTO centre_members (user_id, centre_id, role)
+  VALUES (auth.uid(), v_centre_id, 'owner');
+
+  RETURN QUERY
+    SELECT c.id, c.name, c.code, 'owner'::text
+    FROM centres c
+    WHERE c.id = v_centre_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.create_centre_for_current_user(text, text) TO authenticated;

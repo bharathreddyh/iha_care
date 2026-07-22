@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../models/auth/app_centre.dart';
 import '../../services/auth_service.dart';
 import 'centre_picker_screen.dart';
+import 'create_centre_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,10 +40,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (centres.isEmpty) {
-        setState(() {
-          _error = 'No centres assigned to this account. Contact the administrator.';
-          _loading = false;
-        });
+        // No centre yet → let the user create their own.
+        setState(() => _loading = false);
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CreateCentreScreen()),
+        );
         return;
       }
 
@@ -174,6 +177,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                   CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('Sign In'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const SignUpScreen()),
+                              ),
+                      child: const Text('New here? Create an account'),
                     ),
                   ],
                 ),
