@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
@@ -204,6 +205,67 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
     }
   }
 
+  /// Generates a separate PDF for every doctor with referrals this month,
+  /// saving them into one folder. Returns the folder to the user.
+  Future<void> _exportPerDoctorPdfs() async {
+    if (_detailByDoctor.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No referral data for this month.')),
+      );
+      return;
+    }
+
+    setState(() => _exporting = true);
+    try {
+      final safeMonth = _monthKey.replaceAll('-', '_');
+      final baseDir = await getApplicationDocumentsDirectory();
+      final folder = Directory('${baseDir.path}/incentives_$safeMonth');
+      if (!folder.existsSync()) folder.createSync(recursive: true);
+
+      var count = 0;
+      for (final entry in _detailByDoctor.entries) {
+        final doctorId = entry.key;
+        final rows = entry.value;
+        if (rows.isEmpty) continue;
+
+        final doc = _doctors[doctorId];
+        final docName = doc?.name ?? doctorId;
+        final safeName = docName.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+
+        final bytes = await generateIncentiveReport(
+          month: _monthKey,
+          rows: rows,
+          doctors: {if (doc != null) doctorId: doc},
+        );
+        File('${folder.path}/Dr_$safeName.pdf').writeAsBytesSync(bytes);
+        count++;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved $count PDF${count == 1 ? '' : 's'} to '
+                '${folder.path}'),
+            action: SnackBarAction(
+              label: 'Open',
+              onPressed: () => _openFile(folder.path),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Export failed: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _markAllPaid() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -267,10 +329,27 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else
-            IconButton(
+            PopupMenuButton<String>(
               icon: const Icon(Icons.picture_as_pdf),
               tooltip: 'Export PDF',
-              onPressed: _records.isEmpty ? null : _exportPdf,
+              enabled: _records.isNotEmpty,
+              onSelected: (v) {
+                if (v == 'combined') {
+                  _exportPdf();
+                } else if (v == 'per_doctor') {
+                  _exportPerDoctorPdfs();
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'combined',
+                  child: Text('All doctors (one PDF)'),
+                ),
+                PopupMenuItem(
+                  value: 'per_doctor',
+                  child: Text('One PDF per doctor'),
+                ),
+              ],
             ),
           IconButton(
             icon: const Icon(Icons.check_circle_outline),
