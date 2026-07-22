@@ -53,3 +53,48 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.create_centre_for_current_user(text, text) TO authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Join an existing centre by its code. Adds the current user as 'staff'.
+-- SECURITY DEFINER so it can look up a centre the user can't yet SELECT and
+-- insert the membership past the SELECT-only RLS.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION public.join_centre_by_code(p_code text)
+RETURNS TABLE (id uuid, name text, code text, role text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_centre centres%ROWTYPE;
+  v_role   text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  p_code := upper(trim(p_code));
+  IF p_code = '' THEN
+    RAISE EXCEPTION 'Centre code is required';
+  END IF;
+
+  SELECT * INTO v_centre FROM centres c WHERE c.code = p_code;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CENTRE_NOT_FOUND';
+  END IF;
+
+  INSERT INTO centre_members (user_id, centre_id, role)
+  VALUES (auth.uid(), v_centre.id, 'staff')
+  ON CONFLICT (user_id, centre_id) DO NOTHING;
+
+  SELECT cm.role INTO v_role
+  FROM centre_members cm
+  WHERE cm.user_id = auth.uid() AND cm.centre_id = v_centre.id;
+
+  RETURN QUERY SELECT v_centre.id, v_centre.name, v_centre.code, v_role;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.join_centre_by_code(text) TO authenticated;

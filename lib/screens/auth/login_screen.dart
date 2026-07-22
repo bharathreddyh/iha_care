@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/auth/app_centre.dart';
 import '../../services/auth_service.dart';
 import 'centre_picker_screen.dart';
-import 'create_centre_screen.dart';
+import 'centre_setup_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -43,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // No centre yet → let the user create their own.
         setState(() => _loading = false);
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const CreateCentreScreen()),
+          MaterialPageRoute(builder: (_) => const CentreSetupScreen()),
         );
         return;
       }

@@ -72,6 +72,22 @@ class AuthService extends ChangeNotifier {
     );
   }
 
+  /// Joins an existing centre by its code, adding the current user as staff,
+  /// and returns it. Requires an active session (see [signUp]).
+  Future<AppCentre> joinCentre(String code) async {
+    final result = await _client.rpc(
+      'join_centre_by_code',
+      params: {'p_code': code},
+    );
+    final row = (result as List).first as Map<String, dynamic>;
+    return AppCentre(
+      id: row['id'] as String,
+      name: row['name'] as String,
+      code: row['code'] as String,
+      role: row['role'] as String,
+    );
+  }
+
   Future<List<AppCentre>> _fetchCentres() async {
     final response = await _client
         .from('centre_members')

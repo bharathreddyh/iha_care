@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/auth_service.dart';
-import 'create_centre_screen.dart';
+import 'centre_setup_screen.dart';
 
 /// Self-service registration: create an account, then set up your own centre.
 class SignUpScreen extends StatefulWidget {
@@ -46,7 +46,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (signedIn) {
         // Auto-confirm is on → session is live, go straight to centre setup.
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const CreateCentreScreen()),
+          MaterialPageRoute(builder: (_) => const CentreSetupScreen()),
         );
       } else {
         // Email confirmation required → cannot create a centre until confirmed.

@@ -3,16 +3,20 @@ import 'package:provider/provider.dart';
 
 import '../../services/auth_service.dart';
 
-/// Shown after sign-up (or after signing in with no centre yet) so a user can
-/// create their own centre and enter the app as its owner.
-class CreateCentreScreen extends StatefulWidget {
-  const CreateCentreScreen({super.key});
+/// Shown after sign-up (or after signing in with no centre) so a user can
+/// either create their own centre or join an existing one by its code.
+class CentreSetupScreen extends StatefulWidget {
+  const CentreSetupScreen({super.key});
 
   @override
-  State<CreateCentreScreen> createState() => _CreateCentreScreenState();
+  State<CentreSetupScreen> createState() => _CentreSetupScreenState();
 }
 
-class _CreateCentreScreenState extends State<CreateCentreScreen> {
+enum _Mode { create, join }
+
+class _CentreSetupScreenState extends State<CentreSetupScreen> {
+  _Mode _mode = _Mode.create;
+
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _code = TextEditingController();
@@ -26,7 +30,7 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
     super.dispose();
   }
 
-  Future<void> _create() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _loading = true;
@@ -35,8 +39,9 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
 
     try {
       final auth = context.read<AuthService>();
-      final centre =
-          await auth.createCentre(_name.text.trim(), _code.text.trim());
+      final centre = _mode == _Mode.create
+          ? await auth.createCentre(_name.text.trim(), _code.text.trim())
+          : await auth.joinCentre(_code.text.trim());
       await auth.selectCentre(centre);
       if (!mounted) return;
       // Selecting a centre flips AuthService.isLoggedIn → the app gate takes
@@ -56,16 +61,30 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
     if (raw.contains('CENTRE_CODE_TAKEN')) {
       return 'That centre code is already taken. Choose a different one.';
     }
+    if (raw.contains('CENTRE_NOT_FOUND')) {
+      return 'No centre found with that code. Check it with the centre owner.';
+    }
     if (raw.contains('network') || raw.contains('SocketException')) {
       return 'No internet connection. Check your network.';
     }
-    return 'Could not create the centre. Please try again.';
+    return _mode == _Mode.create
+        ? 'Could not create the centre. Please try again.'
+        : 'Could not join the centre. Please try again.';
+  }
+
+  void _switchMode(_Mode m) {
+    if (m == _mode) return;
+    setState(() {
+      _mode = m;
+      _error = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final isCreate = _mode == _Mode.create;
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Your Centre')),
+      appBar: AppBar(title: const Text('Set Up Centre')),
       body: Center(
         child: SingleChildScrollView(
           child: SizedBox(
@@ -81,8 +100,27 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      SegmentedButton<_Mode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _Mode.create,
+                            label: Text('Create new'),
+                            icon: Icon(Icons.add_business_outlined),
+                          ),
+                          ButtonSegment(
+                            value: _Mode.join,
+                            label: Text('Join existing'),
+                            icon: Icon(Icons.group_add_outlined),
+                          ),
+                        ],
+                        selected: {_mode},
+                        onSelectionChanged: _loading
+                            ? null
+                            : (s) => _switchMode(s.first),
+                      ),
+                      const SizedBox(height: 24),
                       Text(
-                        'Set up your centre',
+                        isCreate ? 'Set up your centre' : 'Join a centre',
                         style: Theme.of(context)
                             .textTheme
                             .headlineSmall
@@ -91,39 +129,45 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'You\'ll be the owner and can add staff later.',
+                        isCreate
+                            ? 'You\'ll be the owner and can add staff later.'
+                            : 'Ask the centre owner for the centre code.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.outline,
                             ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 28),
-                      TextFormField(
-                        controller: _name,
-                        decoration: const InputDecoration(
-                          labelText: 'Centre name',
-                          prefixIcon: Icon(Icons.local_hospital_outlined),
-                          hintText: 'e.g. Sahyadri Scan and Diagnostics',
+                      if (isCreate) ...[
+                        TextFormField(
+                          controller: _name,
+                          decoration: const InputDecoration(
+                            labelText: 'Centre name',
+                            prefixIcon: Icon(Icons.local_hospital_outlined),
+                            hintText: 'e.g. Sahyadri Scan and Diagnostics',
+                          ),
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          validator: (v) => v == null || v.trim().isEmpty
+                              ? 'Enter a centre name'
+                              : null,
                         ),
-                        textCapitalization: TextCapitalization.words,
-                        textInputAction: TextInputAction.next,
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Enter a centre name'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ],
                       TextFormField(
                         controller: _code,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Centre code',
-                          prefixIcon: Icon(Icons.tag),
-                          hintText: 'e.g. IHA01 — a short unique ID',
+                          prefixIcon: const Icon(Icons.tag),
+                          hintText: isCreate
+                              ? 'e.g. IHA01 — a short unique ID'
+                              : 'Enter the code from the owner',
                         ),
                         textCapitalization: TextCapitalization.characters,
                         textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _create(),
+                        onFieldSubmitted: (_) => _submit(),
                         validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Enter a short centre code'
+                            ? 'Enter the centre code'
                             : null,
                       ),
                       if (_error != null) ...[
@@ -147,7 +191,7 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
                       ],
                       const SizedBox(height: 24),
                       FilledButton(
-                        onPressed: _loading ? null : _create,
+                        onPressed: _loading ? null : _submit,
                         child: _loading
                             ? const SizedBox(
                                 height: 20,
@@ -155,7 +199,9 @@ class _CreateCentreScreenState extends State<CreateCentreScreen> {
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('Create centre & continue'),
+                            : Text(isCreate
+                                ? 'Create centre & continue'
+                                : 'Join centre & continue'),
                       ),
                     ],
                   ),
