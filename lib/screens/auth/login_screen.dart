@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/auth/app_centre.dart';
 import '../../services/auth_service.dart';
@@ -15,18 +16,54 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _kRemember = 'login_remember';
+  static const _kSavedEmail = 'login_email';
+  static const _kSavedPassword = 'login_password';
+
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
+  bool _remember = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRemembered();
+  }
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRemembered() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kRemember) ?? false) {
+      if (!mounted) return;
+      setState(() {
+        _remember = true;
+        _email.text = prefs.getString(_kSavedEmail) ?? '';
+        _password.text = prefs.getString(_kSavedPassword) ?? '';
+      });
+    }
+  }
+
+  Future<void> _persistRemember() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_remember) {
+      await prefs.setBool(_kRemember, true);
+      await prefs.setString(_kSavedEmail, _email.text.trim());
+      await prefs.setString(_kSavedPassword, _password.text);
+    } else {
+      await prefs.remove(_kRemember);
+      await prefs.remove(_kSavedEmail);
+      await prefs.remove(_kSavedPassword);
+    }
   }
 
   Future<void> _signIn() async {
@@ -36,6 +73,9 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final auth = context.read<AuthService>();
       final centres = await auth.signIn(_email.text.trim(), _password.text);
+
+      // Credentials were valid — honour the "remember me" choice.
+      await _persistRemember();
 
       if (!mounted) return;
 
@@ -206,12 +246,33 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Enter password' : null,
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _loading ? null : _forgotPassword,
-                        child: const Text('Forgot password?'),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: _loading
+                                ? null
+                                : () =>
+                                    setState(() => _remember = !_remember),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _remember,
+                                  onChanged: _loading
+                                      ? null
+                                      : (v) => setState(
+                                          () => _remember = v ?? false),
+                                ),
+                                const Flexible(child: Text('Remember me')),
+                              ],
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _loading ? null : _forgotPassword,
+                          child: const Text('Forgot password?'),
+                        ),
+                      ],
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
