@@ -83,6 +83,66 @@ class _LoginScreenState extends State<LoginScreen> {
     return 'Sign in failed. Please try again.';
   }
 
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(text: _email.text.trim());
+    final email = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Enter your email and we\'ll send a link to reset your password.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final v = controller.text.trim();
+              if (v.contains('@')) Navigator.pop(ctx, v);
+            },
+            child: const Text('Send link'),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null || !mounted) return;
+
+    try {
+      await context.read<AuthService>().resetPassword(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Password reset link sent to $email.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not send reset email. Try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -145,6 +205,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       onFieldSubmitted: (_) => _signIn(),
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Enter password' : null,
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _loading ? null : _forgotPassword,
+                        child: const Text('Forgot password?'),
+                      ),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),

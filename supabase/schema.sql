@@ -314,3 +314,33 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.join_centre_by_code(text) TO authenticated;
+
+-- List everyone in a centre (email + role); any member may call it.
+CREATE OR REPLACE FUNCTION public.list_centre_members(p_centre_id uuid)
+RETURNS TABLE (user_id uuid, email text, role text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM centre_members cm
+    WHERE cm.centre_id = p_centre_id AND cm.user_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'NOT_A_MEMBER';
+  END IF;
+
+  RETURN QUERY
+    SELECT cm.user_id, u.email::text, cm.role
+    FROM centre_members cm
+    JOIN auth.users u ON u.id = cm.user_id
+    WHERE cm.centre_id = p_centre_id
+    ORDER BY (cm.role = 'owner') DESC, u.email;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.list_centre_members(uuid) TO authenticated;

@@ -9,6 +9,7 @@ import '../screens/billing/new_bill_screen.dart';
 import '../screens/billing/referral_doctors_screen.dart';
 import '../screens/billing/reports_screen.dart';
 import '../screens/billing/scan_types_screen.dart';
+import '../screens/auth/members_screen.dart';
 import '../screens/inventory/inventory_screen.dart';
 import '../screens/typist/worklist_queue_screen.dart';
 import '../services/app_settings_service.dart';
@@ -131,6 +132,12 @@ class _ReceptionistShellState extends State<_ReceptionistShell> {
                             tooltip: 'Inventory',
                             onPressed: () =>
                                 _push(context, const InventoryScreen()),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.groups_outlined),
+                            tooltip: 'Members',
+                            onPressed: () =>
+                                _push(context, const MembersScreen()),
                           ),
                           IconButton(
                             icon: const Icon(Icons.switch_account_outlined),

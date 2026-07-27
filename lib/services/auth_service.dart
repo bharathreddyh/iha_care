@@ -12,25 +12,30 @@ class AuthService extends ChangeNotifier {
   static const _prefDeviceId = 'device_id';
   static const _prefCentreId = 'centre_id';
   static const _prefCentreName = 'centre_name';
+  static const _prefCentreCode = 'centre_code';
 
   final _client = Supabase.instance.client;
 
   String? _centreId;
   String? _centreName;
+  String? _centreCode;
   String? _deviceId;
   int _activeDeviceCount = 0;
   Timer? _heartbeatTimer;
 
   String? get centreId => _centreId;
   String? get centreName => _centreName;
+  String? get centreCode => _centreCode;
   int get activeDeviceCount => _activeDeviceCount;
   User? get currentUser => _client.auth.currentUser;
+  String? get currentUserEmail => _client.auth.currentUser?.email;
   bool get isLoggedIn => _client.auth.currentUser != null && _centreId != null;
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     _centreId = prefs.getString(_prefCentreId);
     _centreName = prefs.getString(_prefCentreName);
+    _centreCode = prefs.getString(_prefCentreCode);
     _deviceId = prefs.getString(_prefDeviceId);
     if (_deviceId == null) {
       _deviceId = const Uuid().v4();
@@ -88,6 +93,28 @@ class AuthService extends ChangeNotifier {
     );
   }
 
+  /// Sends a password-recovery email to [email].
+  Future<void> resetPassword(String email) async {
+    await _client.auth.resetPasswordForEmail(email.trim());
+  }
+
+  /// Returns everyone in the current centre (email + role).
+  Future<List<CentreMemberInfo>> listCentreMembers() async {
+    if (_centreId == null) return [];
+    final result = await _client.rpc(
+      'list_centre_members',
+      params: {'p_centre_id': _centreId},
+    );
+    return (result as List).map((r) {
+      final row = r as Map<String, dynamic>;
+      return CentreMemberInfo(
+        userId: row['user_id'] as String,
+        email: row['email'] as String? ?? '',
+        role: row['role'] as String? ?? 'staff',
+      );
+    }).toList();
+  }
+
   Future<List<AppCentre>> _fetchCentres() async {
     final response = await _client
         .from('centre_members')
@@ -107,8 +134,10 @@ class AuthService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _centreId = centre.id;
     _centreName = centre.name;
+    _centreCode = centre.code;
     await prefs.setString(_prefCentreId, centre.id);
     await prefs.setString(_prefCentreName, centre.name);
+    await prefs.setString(_prefCentreCode, centre.code);
     await _registerDeviceSession();
     _startHeartbeat();
     notifyListeners();
@@ -185,8 +214,10 @@ class AuthService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefCentreId);
     await prefs.remove(_prefCentreName);
+    await prefs.remove(_prefCentreCode);
     _centreId = null;
     _centreName = null;
+    _centreCode = null;
     _activeDeviceCount = 0;
     await _client.auth.signOut();
     notifyListeners();
@@ -197,4 +228,17 @@ class AuthService extends ChangeNotifier {
     _heartbeatTimer?.cancel();
     super.dispose();
   }
+}
+
+/// A member of a centre, as returned by [AuthService.listCentreMembers].
+class CentreMemberInfo {
+  final String userId;
+  final String email;
+  final String role;
+
+  const CentreMemberInfo({
+    required this.userId,
+    required this.email,
+    required this.role,
+  });
 }
