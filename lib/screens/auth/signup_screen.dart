@@ -84,17 +84,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   String _friendlyError(String raw) {
-    if (raw.contains('already registered') ||
-        raw.contains('User already registered')) {
+    final r = raw.toLowerCase();
+    if (r.contains('already registered') ||
+        r.contains('already exists') ||
+        r.contains('user already')) {
       return 'An account with this email already exists. Try signing in.';
     }
-    if (raw.contains('Password should be') || raw.contains('weak')) {
-      return 'Password is too weak. Use at least 6 characters.';
+    if (r.contains('weak') ||
+        r.contains('compromised') ||
+        r.contains('leaked') ||
+        r.contains('pwned') ||
+        r.contains('password should be')) {
+      return 'Password is too weak or has appeared in a data breach. '
+          'Use a stronger, unique password.';
     }
-    if (raw.contains('network') || raw.contains('SocketException')) {
+    if (r.contains('network') || r.contains('socketexception')) {
       return 'No internet connection. Check your network.';
     }
-    return 'Sign up failed. Please try again.';
+    if (r.contains('signups not allowed') ||
+        r.contains('signup is disabled')) {
+      return 'Sign-ups are disabled in Supabase. Enable them in '
+          'Authentication → Providers → Email.';
+    }
+    // Surface the real reason to help diagnose.
+    return 'Sign up failed: $raw';
   }
 
   @override
