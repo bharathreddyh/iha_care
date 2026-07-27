@@ -100,6 +100,21 @@ class AuthService extends ChangeNotifier {
     await _client.auth.resetPasswordForEmail(email.trim());
   }
 
+  /// Changes the signed-in user's password after verifying [currentPassword].
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final email = _client.auth.currentUser?.email;
+    if (email == null) {
+      throw Exception('Not signed in');
+    }
+    // Re-authenticate to confirm the current password is correct.
+    await _client.auth
+        .signInWithPassword(email: email, password: currentPassword);
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
   /// Verifies the emailed recovery [code] and sets a new password.
   /// The temporary recovery session is cleared afterwards so the user signs in
   /// fresh with the new password.

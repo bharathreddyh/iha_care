@@ -9,6 +9,7 @@ import '../screens/billing/new_bill_screen.dart';
 import '../screens/billing/referral_doctors_screen.dart';
 import '../screens/billing/reports_screen.dart';
 import '../screens/billing/scan_types_screen.dart';
+import '../screens/auth/change_password_screen.dart';
 import '../screens/auth/members_screen.dart';
 import '../screens/inventory/inventory_screen.dart';
 import '../screens/typist/worklist_queue_screen.dart';
@@ -138,6 +139,12 @@ class _ReceptionistShellState extends State<_ReceptionistShell> {
                             tooltip: 'Members',
                             onPressed: () =>
                                 _push(context, const MembersScreen()),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.password_outlined),
+                            tooltip: 'Change Password',
+                            onPressed: () =>
+                                _push(context, const ChangePasswordScreen()),
                           ),
                           IconButton(
                             icon: const Icon(Icons.switch_account_outlined),
@@ -292,6 +299,15 @@ class _TypistShell extends StatelessWidget {
                       const SizedBox(height: 4),
                       _CentreLabel(),
                       const SizedBox(height: 8),
+                      IconButton(
+                        icon: const Icon(Icons.password_outlined),
+                        tooltip: 'Change Password',
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ChangePasswordScreen()),
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.switch_account_outlined),
                         tooltip: 'Switch Role',
