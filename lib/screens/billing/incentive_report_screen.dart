@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../../models/billing/incentive_record.dart';
 import '../../models/billing/referral_doctor.dart';
+import '../../services/auth_service.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
@@ -160,6 +161,7 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
         month: _monthKey,
         rows: rows,
         doctors: _doctors,
+        clinicName: context.read<AuthService>().centreName ?? '',
       );
       await Printing.sharePdf(
         bytes: bytes,
@@ -192,6 +194,7 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
         doctors: {
           if (doc != null) record.referralDoctorId: doc,
         },
+        clinicName: context.read<AuthService>().centreName ?? '',
       );
       final safeName =
           docName.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');

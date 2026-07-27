@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/auth_service.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
@@ -54,6 +55,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         data: _data!,
         includeExcluded: _includeExcluded,
         includeCancelled: _includeCancelled,
+        clinicName: context.read<AuthService>().centreName ?? '',
       );
       await Printing.sharePdf(
         bytes: bytes,

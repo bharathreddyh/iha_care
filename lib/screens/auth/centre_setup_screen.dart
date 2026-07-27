@@ -144,7 +144,7 @@ class _CentreSetupScreenState extends State<CentreSetupScreen> {
                           decoration: const InputDecoration(
                             labelText: 'Centre name',
                             prefixIcon: Icon(Icons.local_hospital_outlined),
-                            hintText: 'e.g. Sahyadri Scan and Diagnostics',
+                            hintText: 'e.g. your scan & diagnostics centre',
                           ),
                           textCapitalization: TextCapitalization.words,
                           textInputAction: TextInputAction.next,
