@@ -93,9 +93,28 @@ class AuthService extends ChangeNotifier {
     );
   }
 
-  /// Sends a password-recovery email to [email].
+  /// Sends a password-recovery email to [email]. With the Supabase "Reset
+  /// Password" email template configured to show {{ .Token }}, this delivers a
+  /// 6-digit code the user enters via [confirmPasswordReset].
   Future<void> resetPassword(String email) async {
     await _client.auth.resetPasswordForEmail(email.trim());
+  }
+
+  /// Verifies the emailed recovery [code] and sets a new password.
+  /// The temporary recovery session is cleared afterwards so the user signs in
+  /// fresh with the new password.
+  Future<void> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _client.auth.verifyOTP(
+      email: email.trim(),
+      token: code.trim(),
+      type: OtpType.recovery,
+    );
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+    await _client.auth.signOut();
   }
 
   /// Returns everyone in the current centre (email + role).
