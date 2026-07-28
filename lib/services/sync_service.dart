@@ -16,6 +16,7 @@ class SyncService extends ChangeNotifier {
   final _client = Supabase.instance.client;
 
   SyncStatus _status = SyncStatus.idle;
+  bool _isSyncing = false;
   DateTime? _lastSync;
   String? _lastError;
   StreamSubscription? _connectivitySub;
@@ -52,7 +53,7 @@ class SyncService extends ChangeNotifier {
       }
     });
 
-    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) => syncAll());
+    _syncTimer = Timer.periodic(const Duration(seconds: 10), (_) => syncAll());
     syncAll();
   }
 
@@ -66,6 +67,8 @@ class SyncService extends ChangeNotifier {
 
   Future<void> syncAll() async {
     if (!_auth.isLoggedIn) return;
+    if (_isSyncing) return; // a previous cycle is still running — skip this tick
+    _isSyncing = true;
     final centreId = _auth.centreId!;
     _setStatus(SyncStatus.syncing);
     try {
@@ -93,6 +96,8 @@ class SyncService extends ChangeNotifier {
     } catch (e) {
       _lastError = e.toString();
       _setStatus(SyncStatus.error);
+    } finally {
+      _isSyncing = false;
     }
   }
 
