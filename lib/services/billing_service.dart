@@ -31,11 +31,14 @@ class BillingService {
   }
 
   Future<void> saveScanType(ScanType scan) async {
-    await _db.insert('scan_types', scan.toMap());
+    await _db.insert('scan_types', {...scan.toMap(), 'synced': 0});
   }
 
   Future<void> updateScanType(ScanType scan) async {
-    await _db.update('scan_types', scan.toMap(), 'id = ?', [scan.id]);
+    // Mark dirty (synced = 0) so the edit is pushed; otherwise the next pull
+    // would overwrite it with the old cloud value.
+    await _db.update(
+        'scan_types', {...scan.toMap(), 'synced': 0}, 'id = ?', [scan.id]);
   }
 
   Future<int> rawBillCountForScanType(String scanTypeId) async {
@@ -135,11 +138,14 @@ class BillingService {
     if ((map['id'] as String).isEmpty) {
       map['id'] = _uuid.v4();
     }
+    map['synced'] = 0;
     await _db.insert('referral_doctors', map);
   }
 
   Future<void> updateReferralDoctor(ReferralDoctor doc) async {
-    await _db.update('referral_doctors', doc.toMap(), 'id = ?', [doc.id]);
+    // Mark dirty so the edit is pushed and not reverted by the next pull.
+    await _db.update(
+        'referral_doctors', {...doc.toMap(), 'synced': 0}, 'id = ?', [doc.id]);
   }
 
   // ── Doctor Scan Incentive Rates ───────────────────────────────────────────
@@ -160,6 +166,16 @@ class BillingService {
   /// Only persists rows with rate > 0; zero means "no incentive".
   Future<void> saveAllDoctorRates(
       String doctorId, List<DoctorScanIncentive> rates) async {
+    final existing = await _db.query(
+      'doctor_scan_incentives',
+      columns: 'id',
+      where: 'doctor_id = ?',
+      whereArgs: [doctorId],
+    );
+    final existingIds = existing.map((e) => e['id'] as String).toSet();
+    final keptIds = <String>{};
+    final now = DateTime.now().toIso8601String();
+
     await _db.transaction((txn) async {
       await txn.delete(
         'doctor_scan_incentives',
@@ -168,12 +184,26 @@ class BillingService {
       );
       for (final r in rates) {
         if (r.rate > 0) {
+          final map = {...r.toMap(), 'synced': 0};
+          keptIds.add(map['id'] as String);
           await txn.insert(
             'doctor_scan_incentives',
-            r.toMap(),
+            map,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+      }
+      // Tombstone rows removed by this save so the cloud copy is deleted too.
+      for (final id in existingIds.difference(keptIds)) {
+        await txn.insert(
+          'deleted_records',
+          {
+            'table_name': 'doctor_scan_incentives',
+            'record_id': id,
+            'created_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
     });
   }
