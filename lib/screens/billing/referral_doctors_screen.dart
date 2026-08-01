@@ -166,6 +166,15 @@ class _DoctorFormState extends State<_DoctorForm> {
     FocusScope.of(context).unfocus();
   }
 
+  /// Empties every scan-type rate (no incentive).
+  void _clearAll() {
+    for (final c in _rateControllers.values) {
+      c.clear();
+    }
+    _bulkRate.clear();
+    FocusScope.of(context).unfocus();
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
@@ -273,7 +282,10 @@ class _DoctorFormState extends State<_DoctorForm> {
               const SizedBox(height: 10),
 
               // Set the same amount for every scan type at once.
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SizedBox(
                     width: 120,
@@ -288,11 +300,14 @@ class _DoctorFormState extends State<_DoctorForm> {
                       onSubmitted: (_) => _applyToAll(),
                     ),
                   ),
-                  const SizedBox(width: 8),
                   FilledButton.tonalIcon(
                     onPressed: _applyToAll,
                     icon: const Icon(Icons.done_all, size: 18),
                     label: const Text('Apply to all'),
+                  ),
+                  TextButton(
+                    onPressed: _clearAll,
+                    child: const Text('Clear all'),
                   ),
                 ],
               ),
