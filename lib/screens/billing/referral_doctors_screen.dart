@@ -113,6 +113,7 @@ class _DoctorFormState extends State<_DoctorForm> {
   late final TextEditingController _clinic;
   late final TextEditingController _specialty;
   late final Map<String, TextEditingController> _rateControllers;
+  final _bulkRate = TextEditingController();
   bool _isActive = true;
   bool _saving = false;
 
@@ -143,8 +144,26 @@ class _DoctorFormState extends State<_DoctorForm> {
     _phone.dispose();
     _clinic.dispose();
     _specialty.dispose();
+    _bulkRate.dispose();
     for (final c in _rateControllers.values) c.dispose();
     super.dispose();
+  }
+
+  /// Fills every scan-type rate with the amount typed in the bulk field.
+  void _applyToAll() {
+    final raw = _bulkRate.text.trim();
+    final value = double.tryParse(raw);
+    if (value == null || value < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid amount first.')),
+      );
+      return;
+    }
+    final text = value.toStringAsFixed(0);
+    for (final c in _rateControllers.values) {
+      c.text = text;
+    }
+    FocusScope.of(context).unfocus();
   }
 
   Future<void> _save() async {
@@ -252,6 +271,32 @@ class _DoctorFormState extends State<_DoctorForm> {
                     ?.copyWith(color: Theme.of(context).colorScheme.outline),
               ),
               const SizedBox(height: 10),
+
+              // Set the same amount for every scan type at once.
+              Row(
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      controller: _bulkRate,
+                      decoration: const InputDecoration(
+                        prefixText: '₹ ',
+                        hintText: 'Amount',
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                      onSubmitted: (_) => _applyToAll(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: _applyToAll,
+                    icon: const Icon(Icons.done_all, size: 18),
+                    label: const Text('Apply to all'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
               ...categories.expand((cat) {
                 final scans = byCategory[cat]!;
