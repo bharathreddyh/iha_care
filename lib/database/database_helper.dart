@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 10,
+      version: 11,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -165,6 +165,17 @@ class DatabaseHelper {
       )
     ''');
 
+    // Tombstones: records deleted locally that must also be deleted in the cloud
+    // so the next pull doesn't restore them.
+    batch.execute('''
+      CREATE TABLE deleted_records (
+        table_name TEXT NOT NULL,
+        record_id  TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (table_name, record_id)
+      )
+    ''');
+
     await batch.commit(noResult: true);
     await _seedScanTypes(db);
   }
@@ -251,6 +262,18 @@ class DatabaseHelper {
       await db.execute(
           "UPDATE scan_types SET name = 'USG ' || name, synced = 0 "
           "WHERE modality = 'US' AND name NOT LIKE 'USG%'");
+    }
+    if (oldVersion < 11) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS deleted_records (
+            table_name TEXT NOT NULL,
+            record_id  TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (table_name, record_id)
+          )
+        ''');
+      } catch (_) {}
     }
     if (oldVersion < 9) {
       final newTypes = [

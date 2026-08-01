@@ -54,6 +54,17 @@ class BillingService {
       [id],
     );
     final affectedBills = refs.first['cnt'] as int? ?? 0;
+
+    // Incentive rows that will be removed — tombstone each so the cloud copy
+    // is deleted too and the sync pull cannot restore them.
+    final incentiveRows = await _db.query(
+      'doctor_scan_incentives',
+      columns: 'id',
+      where: 'scan_type_id = ?',
+      whereArgs: [id],
+    );
+
+    final now = DateTime.now().toIso8601String();
     await _db.transaction((txn) async {
       if (affectedBills > 0) {
         await txn.rawUpdate(
@@ -64,6 +75,24 @@ class BillingService {
       await txn.delete('scan_types', where: 'id = ?', whereArgs: [id]);
       await txn.delete('doctor_scan_incentives',
           where: 'scan_type_id = ?', whereArgs: [id]);
+
+      // Record tombstones (ignore duplicates).
+      await txn.insert(
+        'deleted_records',
+        {'table_name': 'scan_types', 'record_id': id, 'created_at': now},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      for (final r in incentiveRows) {
+        await txn.insert(
+          'deleted_records',
+          {
+            'table_name': 'doctor_scan_incentives',
+            'record_id': r['id'],
+            'created_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
     });
     return affectedBills;
   }

@@ -72,6 +72,7 @@ class SyncService extends ChangeNotifier {
     final centreId = _auth.centreId!;
     _setStatus(SyncStatus.syncing);
     try {
+      await _pushDeletions();
       await _pushScanTypes();
       await _pushReferralDoctors(centreId);
       await _pushDoctorScanIncentives(centreId);
@@ -102,6 +103,22 @@ class SyncService extends ChangeNotifier {
   }
 
   // ── Push helpers ─────────────────────────────────────────────────────────
+
+  /// Deletes tombstoned records from the cloud, then clears the tombstone.
+  /// Runs before pulls so deletions can't be restored by the next pull.
+  Future<void> _pushDeletions() async {
+    final rows = await _db.query('deleted_records');
+    for (final row in rows) {
+      final table = row['table_name'] as String;
+      final recordId = row['record_id'] as String;
+      await _client.from(table).delete().eq('id', recordId);
+      await _db.delete(
+        'deleted_records',
+        'table_name = ? AND record_id = ?',
+        [table, recordId],
+      );
+    }
+  }
 
   Future<void> _pushBills(String centreId) async {
     final rows = await _db.query('bills', where: 'synced = 0');
