@@ -24,7 +24,7 @@ class NewBillScreenState extends State<NewBillScreen> {
   // Patient controllers
   final _patientName = TextEditingController();
   final _patientId = TextEditingController();
-  final _patientDob = TextEditingController();
+  final _patientAge = TextEditingController();
   final _patientPhone = TextEditingController();
   String _patientSex = 'F';
 
@@ -80,7 +80,7 @@ class NewBillScreenState extends State<NewBillScreen> {
   void dispose() {
     _patientName.dispose();
     _patientId.dispose();
-    _patientDob.dispose();
+    _patientAge.dispose();
     _patientPhone.dispose();
     _price.dispose();
     _discount.dispose();
@@ -93,36 +93,15 @@ class NewBillScreenState extends State<NewBillScreen> {
   double get _discountAmt => double.tryParse(_discount.text) ?? 0;
   double get _finalAmount => (_scanFee - _discountAmt).clamp(0, double.infinity);
 
-  Future<void> _pickDob() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(1990),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      final dd = picked.day.toString().padLeft(2, '0');
-      final mm = picked.month.toString().padLeft(2, '0');
-      _patientDob.text = '$dd/$mm/${picked.year}';
-    }
-  }
-
-  /// Converts DD/MM/YYYY user input to YYYYMMDD for DICOM storage.
-  String? _dobToDicom(String input) {
-    final s = input.trim();
-    if (s.isEmpty) return null;
-    final parts = s.split(RegExp(r'[/\-.]'));
-    if (parts.length != 3) return null;
-    final d = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    final y = int.tryParse(parts[2]);
-    if (d == null || m == null || y == null) return null;
-    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1900 || y > DateTime.now().year) {
-      return null;
-    }
+  /// Approximates a DICOM birth date (YYYYMMDD) from an age in years so the
+  /// modality worklist still receives a PatientBirthDate.
+  String? _ageToDicomDob(int? age) {
+    if (age == null || age < 0 || age > 130) return null;
+    final now = DateTime.now();
+    final y = now.year - age;
     return '${y.toString().padLeft(4, '0')}'
-        '${m.toString().padLeft(2, '0')}'
-        '${d.toString().padLeft(2, '0')}';
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _submit() async {
@@ -143,7 +122,8 @@ class NewBillScreenState extends State<NewBillScreen> {
         id: '',
         patientName: _patientName.text.trim(),
         patientId: _patientId.text.trim().isEmpty ? null : _patientId.text.trim(),
-        patientDob: _dobToDicom(_patientDob.text),
+        patientAge: int.tryParse(_patientAge.text.trim()),
+        patientDob: _ageToDicomDob(int.tryParse(_patientAge.text.trim())),
         patientSex: _patientSex,
         patientPhone: _patientPhone.text.trim().isEmpty ? null : _patientPhone.text.trim(),
         scanTypeId: _selectedScan!.id,
@@ -195,7 +175,7 @@ class NewBillScreenState extends State<NewBillScreen> {
     _formKey.currentState?.reset();
     _patientName.clear();
     _patientId.clear();
-    _patientDob.clear();
+    _patientAge.clear();
     _patientPhone.clear();
     _price.clear();
     _discount.text = '0';
@@ -269,22 +249,24 @@ class NewBillScreenState extends State<NewBillScreen> {
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _patientDob,
-                      decoration: InputDecoration(
-                        labelText: 'Date of Birth',
-                        hintText: 'DD/MM/YYYY',
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today_outlined),
-                          onPressed: _pickDob,
-                        ),
+                      controller: _patientAge,
+                      decoration: const InputDecoration(
+                        labelText: 'Age',
+                        hintText: 'Years',
+                        suffixText: 'yrs',
                       ),
-                      keyboardType: TextInputType.datetime,
-                      inputFormatters: [_DateInputFormatter()],
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) return null;
-                        return _dobToDicom(v) == null
-                            ? 'Use DD/MM/YYYY'
-                            : null;
+                        final n = int.tryParse(v.trim());
+                        if (n == null || n < 0 || n > 130) {
+                          return 'Enter a valid age';
+                        }
+                        return null;
                       },
                     ),
                   ),
@@ -721,32 +703,6 @@ class _ManageQuickPricesSheetState extends State<_ManageQuickPricesSheet> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── Date auto-slash formatter (DD/MM/YYYY) ────────────────────────────────────
-
-class _DateInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
-    // Strip everything except digits
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    // Cap at 8 digits (DDMMYYYY)
-    final capped = digits.length > 8 ? digits.substring(0, 8) : digits;
-
-    final buf = StringBuffer();
-    for (var i = 0; i < capped.length; i++) {
-      if (i == 2 || i == 4) buf.write('/');
-      buf.write(capped[i]);
-    }
-
-    final text = buf.toString();
-    return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }

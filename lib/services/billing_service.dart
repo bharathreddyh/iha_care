@@ -396,6 +396,7 @@ class BillingService {
           'patient_name': 'DELETED',
           'patient_id': null,
           'patient_dob': null,
+          'patient_age': null,
           'patient_sex': null,
           'patient_phone': null,
           'notes': null,

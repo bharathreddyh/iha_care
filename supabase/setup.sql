@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
 
 -- ── Later-added bill columns (safe if already present) ───────────────────────
 
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS patient_age      INTEGER;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_paid      REAL;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS report_created   BOOLEAN DEFAULT false;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS dispatched       BOOLEAN DEFAULT false;

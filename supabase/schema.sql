@@ -222,6 +222,7 @@ CREATE TRIGGER t_inv_txn_upd   BEFORE UPDATE ON inventory_transactions  FOR EACH
 -- ── Migration: cancel support + later-added bill columns ──────────────────────
 -- Safe to re-run; uses IF NOT EXISTS.
 
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS patient_age    INTEGER;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_paid    REAL;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS report_created BOOLEAN DEFAULT false;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS dispatched     BOOLEAN DEFAULT false;

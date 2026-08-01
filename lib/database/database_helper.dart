@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = join(dir.path, 'iha_care_billing.db');
     return openDatabase(
       dbPath,
-      version: 11,
+      version: 12,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -59,6 +59,7 @@ class DatabaseHelper {
         patient_name TEXT NOT NULL,
         patient_id TEXT,
         patient_dob TEXT,
+        patient_age INTEGER,
         patient_sex TEXT,
         patient_phone TEXT,
         scan_type_id TEXT,
@@ -262,6 +263,11 @@ class DatabaseHelper {
       await db.execute(
           "UPDATE scan_types SET name = 'USG ' || name, synced = 0 "
           "WHERE modality = 'US' AND name NOT LIKE 'USG%'");
+    }
+    if (oldVersion < 12) {
+      try {
+        await db.execute('ALTER TABLE bills ADD COLUMN patient_age INTEGER');
+      } catch (_) {}
     }
     if (oldVersion < 11) {
       try {
