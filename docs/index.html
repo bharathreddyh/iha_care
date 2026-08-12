@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NT Scan Window Calculator</title>
+<style>
+  :root {
+    --ink: #1b2430;
+    --paper: #f6f5f1;
+    --line: #cfd3d1;
+    --teal: #2a5f5a;
+    --teal-deep: #163a37;
+    --amber: #b8823a;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --serif: 'Source Serif 4', Georgia, serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+
+  .sheet {
+    width: 100%;
+    max-width: 560px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    box-shadow: 0 1px 3px rgba(20,30,30,0.06);
+  }
+
+  .header {
+    padding: 28px 32px 22px;
+    border-bottom: 1px solid var(--line);
+    background: var(--teal-deep);
+    color: var(--paper);
+    border-radius: 2px 2px 0 0;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .sub {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    opacity: 0.7;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  .body {
+    padding: 28px 32px 32px;
+  }
+
+  .mode-toggle {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 10px 12px;
+    background: #fff;
+    border: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink);
+    cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .mode-btn:last-child { border-right: none; }
+  .mode-btn.active {
+    background: var(--teal);
+    color: #fff;
+  }
+
+  .field-group { display: none; }
+  .field-group.active { display: block; }
+
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #5b6560;
+    margin-bottom: 6px;
+  }
+
+  .field-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .field { flex: 1; }
+
+  input[type="date"], input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-family: var(--serif);
+    font-size: 15px;
+    color: var(--ink);
+    background: var(--paper);
+  }
+
+  input:focus {
+    outline: none;
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px rgba(42,95,90,0.12);
+  }
+
+  .hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #8a938e;
+    margin-top: -12px;
+    margin-bottom: 18px;
+  }
+
+  .result {
+    margin-top: 8px;
+    border-top: 1px dashed var(--line);
+    padding-top: 22px;
+  }
+
+  .result-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5b6560;
+    margin-bottom: 10px;
+  }
+
+  .window-card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--teal);
+    border-radius: 2px;
+    padding: 18px 20px;
+  }
+
+  .window-dates {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--teal-deep);
+    line-height: 1.4;
+  }
+
+  .window-dates .to {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: #8a938e;
+    margin: 0 8px;
+  }
+
+  .window-meta {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #6b7570;
+    margin-top: 10px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: var(--amber);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-top: 12px;
+  }
+
+  .error {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: #a4432f;
+    margin-top: 6px;
+  }
+
+  .footnote {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: #9aa39e;
+    margin-top: 24px;
+    line-height: 1.6;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <div class="header">
+    <div class="eyebrow">Sahyadri Scan &amp; Diagnostics</div>
+    <h1>Scan Window Calculator</h1>
+    <div class="sub">Resolves NT (12w5d–13w5d) and anomaly (20w0d–22w0d) booking windows from LMP, current gestational age, or EDD.</div>
+  </div>
+
+  <div class="body">
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="lmp">LMP</button>
+      <button class="mode-btn" data-mode="ga">GA today</button>
+      <button class="mode-btn" data-mode="edd">EDD</button>
+    </div>
+
+    <div class="field-group active" id="mode-lmp">
+      <div class="field-row">
+        <div class="field">
+          <label for="lmp-date">Last menstrual period</label>
+          <input type="date" id="lmp-date">
+        </div>
+      </div>
+    </div>
+
+    <div class="field-group" id="mode-ga">
+      <div class="field-row">
+        <div class="field">
+          <label for="ga-weeks">GA — weeks</label>
+          <input type="number" id="ga-weeks" min="0" max="42" placeholder="e.g. 6">
+        </div>
+        <div class="field">
+          <label for="ga-days">+ days</label>
+          <input type="number" id="ga-days" min="0" max="6" placeholder="e.g. 2">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="ga-refdate">As of date</label>
+          <input type="date" id="ga-refdate">
+        </div>
+      </div>
+    </div>
+
+    <div class="field-group" id="mode-edd">
+      <div class="field-row">
+        <div class="field">
+          <label for="edd-date">Estimated due date</label>
+          <input type="date" id="edd-date">
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error" style="display:none;"></div>
+
+    <div class="result">
+      <div class="result-label">NT scan window</div>
+      <div class="window-card">
+        <div class="window-dates" id="window-dates">— enter a date to calculate —</div>
+        <div class="window-meta" id="window-meta"></div>
+        <div class="badge" id="ideal-badge" style="display:none;">13w0d ≈ ideal single-visit date</div>
+      </div>
+    </div>
+
+    <div class="result">
+      <div class="result-label">Anomaly scan window</div>
+      <div class="window-card" style="border-left-color: var(--amber);">
+        <div class="window-dates" id="anomaly-window-dates">— enter a date to calculate —</div>
+        <div class="window-meta" id="anomaly-window-meta"></div>
+      </div>
+    </div>
+
+    <div class="footnote">
+      NT window taken as 12w5d–13w5d (valid range 11w0d–13w6d). Anomaly/TIFFA window taken as 20w0d–22w0d. Calculations use LMP-based dating at 280 days gestation. Verify against CRL/scan dating in-clinic before booking.
+    </div>
+  </div>
+</div>
+
+<script>
+  const els = {
+    modeBtns: document.querySelectorAll('.mode-btn'),
+    groups: document.querySelectorAll('.field-group'),
+    lmpDate: document.getElementById('lmp-date'),
+    gaWeeks: document.getElementById('ga-weeks'),
+    gaDays: document.getElementById('ga-days'),
+    gaRefDate: document.getElementById('ga-refdate'),
+    eddDate: document.getElementById('edd-date'),
+    windowDates: document.getElementById('window-dates'),
+    windowMeta: document.getElementById('window-meta'),
+    idealBadge: document.getElementById('ideal-badge'),
+    anomalyWindowDates: document.getElementById('anomaly-window-dates'),
+    anomalyWindowMeta: document.getElementById('anomaly-window-meta'),
+    error: document.getElementById('error'),
+  };
+
+  let mode = 'lmp';
+
+  els.modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode;
+      els.modeBtns.forEach(b => b.classList.toggle('active', b === btn));
+      els.groups.forEach(g => g.classList.toggle('active', g.id === 'mode-' + mode));
+      calculate();
+    });
+  });
+
+  // default "as of" date to today
+  const today = new Date();
+  els.gaRefDate.value = today.toISOString().slice(0, 10);
+
+  function addDays(date, days) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+  }
+
+  function formatDate(d) {
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getLMP() {
+    if (mode === 'lmp') {
+      if (!els.lmpDate.value) return null;
+      return parseLocalDate(els.lmpDate.value);
+    }
+    if (mode === 'ga') {
+      if (!els.gaRefDate.value || els.gaWeeks.value === '') return null;
+      const weeks = parseInt(els.gaWeeks.value, 10) || 0;
+      const days = parseInt(els.gaDays.value, 10) || 0;
+      const totalDays = weeks * 7 + days;
+      const ref = parseLocalDate(els.gaRefDate.value);
+      return addDays(ref, -totalDays);
+    }
+    if (mode === 'edd') {
+      if (!els.eddDate.value) return null;
+      const edd = parseLocalDate(els.eddDate.value);
+      return addDays(edd, -280);
+    }
+    return null;
+  }
+
+  function parseLocalDate(str) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function calculate() {
+    els.error.style.display = 'none';
+    const lmp = getLMP();
+
+    if (!lmp || isNaN(lmp.getTime())) {
+      els.windowDates.textContent = '— enter a date to calculate —';
+      els.windowMeta.textContent = '';
+      els.idealBadge.style.display = 'none';
+      els.anomalyWindowDates.textContent = '— enter a date to calculate —';
+      els.anomalyWindowMeta.textContent = '';
+      return;
+    }
+
+    // NT window: 12w5d (89 days) to 13w5d (96 days) from LMP
+    const windowStart = addDays(lmp, 89);
+    const windowEnd = addDays(lmp, 96);
+    const idealDate = addDays(lmp, 91); // 13w0d
+
+    els.windowDates.innerHTML =
+      formatDate(windowStart) + '<span class="to">→</span>' + formatDate(windowEnd);
+
+    const edd = addDays(lmp, 280);
+    els.windowMeta.textContent = 'LMP ' + formatDate(lmp) + '  ·  EDD ' + formatDate(edd);
+
+    els.idealBadge.textContent = '13w0d ≈ ' + formatDate(idealDate);
+    els.idealBadge.style.display = 'inline-block';
+
+    // Anomaly scan window: 20w0d (140 days) to 22w0d (154 days) from LMP
+    const anomalyStart = addDays(lmp, 140);
+    const anomalyEnd = addDays(lmp, 154);
+    els.anomalyWindowDates.innerHTML =
+      formatDate(anomalyStart) + '<span class="to">→</span>' + formatDate(anomalyEnd);
+    els.anomalyWindowMeta.textContent = 'LMP ' + formatDate(lmp) + '  ·  EDD ' + formatDate(edd);
+  }
+
+  [els.lmpDate, els.gaWeeks, els.gaDays, els.gaRefDate, els.eddDate].forEach(el => {
+    el.addEventListener('input', calculate);
+  });
+
+  calculate();
+</script>
+
+</body>
+</html>
