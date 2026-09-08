@@ -3,6 +3,7 @@ class Bill {
   final String patientName;
   final String? patientId;
   final String? patientDob;
+  final int? patientAge;
   final String? patientSex;
   final String? patientPhone;
   final String? scanTypeId;
@@ -29,6 +30,7 @@ class Bill {
     required this.patientName,
     this.patientId,
     this.patientDob,
+    this.patientAge,
     this.patientSex,
     this.patientPhone,
     this.scanTypeId,
@@ -62,6 +64,7 @@ class Bill {
         patientName: m['patient_name'] as String,
         patientId: m['patient_id'] as String?,
         patientDob: m['patient_dob'] as String?,
+        patientAge: (m['patient_age'] as num?)?.toInt(),
         patientSex: m['patient_sex'] as String?,
         patientPhone: m['patient_phone'] as String?,
         scanTypeId: m['scan_type_id'] as String?,
@@ -89,6 +92,7 @@ class Bill {
         'patient_name': patientName,
         'patient_id': patientId,
         'patient_dob': patientDob,
+        'patient_age': patientAge,
         'patient_sex': patientSex,
         'patient_phone': patientPhone,
         'scan_type_id': scanTypeId,
@@ -116,6 +120,7 @@ class Bill {
     String? patientName,
     String? patientId,
     String? patientDob,
+    int? patientAge,
     String? patientSex,
     String? patientPhone,
     String? scanTypeId,
@@ -142,6 +147,7 @@ class Bill {
         patientName: patientName ?? this.patientName,
         patientId: patientId ?? this.patientId,
         patientDob: patientDob ?? this.patientDob,
+        patientAge: patientAge ?? this.patientAge,
         patientSex: patientSex ?? this.patientSex,
         patientPhone: patientPhone ?? this.patientPhone,
         scanTypeId: scanTypeId ?? this.scanTypeId,

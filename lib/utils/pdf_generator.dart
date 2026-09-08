@@ -44,9 +44,9 @@ Future<Uint8List> generateReceipt(
   Bill bill,
   ScanType? scanType,
   ReferralDoctor? referralDoctor, {
-  String header1 = 'Sahyadri Scan and Diagnostics',
+  String header1 = 'Your Centre Name',
   String header2 = 'Scan and Diagnostics Centre',
-  String footer  = 'Thank you for visiting Sahyadri Scan and Diagnostics',
+  String footer  = 'Thank you for visiting',
 }) async {
   final f = await _loadFonts();
   final pdf = pw.Document();
@@ -125,6 +125,7 @@ Future<Uint8List> generateIncentiveReport({
   required String month,
   required List<Map<String, dynamic>> rows,
   required Map<String, ReferralDoctor> doctors,
+  String clinicName = '',
 }) async {
   final f = await _loadFonts();
   final pdf = pw.Document();
@@ -148,6 +149,9 @@ Future<Uint8List> generateIncentiveReport({
     final doctor = doctors[doctorId];
     final doctorName =
         doctor != null ? 'Dr. ${doctor.name}' : doctorId;
+
+    // Each doctor starts on a fresh page (first doctor uses the first page).
+    if (docSections.isNotEmpty) docSections.add(pw.NewPage());
 
     double doctorTotal = 0;
     final dataRows = <pw.TableRow>[];
@@ -207,19 +211,21 @@ Future<Uint8List> generateIncentiveReport({
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
-      header: (ctx) => ctx.pageNumber == 1
-          ? pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'Sahyadri Scan and Diagnostics — Referral Incentive Report',
-                  style: f.style(fontSize: 16, isBold: true),
-                ),
-                pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
-                pw.SizedBox(height: 8),
-              ],
-            )
-          : pw.SizedBox(),
+      // Header repeats on every page so each doctor's page is self-contained.
+      header: (ctx) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            clinicName.trim().isEmpty
+                ? 'Referral Incentive Report'
+                : '${clinicName.trim()} — Referral Incentive Report',
+            style: f.style(fontSize: 16, isBold: true),
+          ),
+          pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
+          pw.Divider(thickness: 0.5, color: PdfColors.grey400),
+          pw.SizedBox(height: 4),
+        ],
+      ),
       build: (ctx) => docSections.isEmpty
           ? [
               pw.Center(
@@ -241,6 +247,7 @@ Future<Uint8List> generateMonthlyReport({
   required Map<String, dynamic> data,
   required bool includeExcluded,
   required bool includeCancelled,
+  String clinicName = '',
 }) async {
   final f = await _loadFonts();
   final pdf = pw.Document();
@@ -261,7 +268,10 @@ Future<Uint8List> generateMonthlyReport({
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(32),
       build: (ctx) => [
-        pw.Text('Sahyadri Scan and Diagnostics — Monthly Report',
+        pw.Text(
+            clinicName.trim().isEmpty
+                ? 'Monthly Report'
+                : '${clinicName.trim()} — Monthly Report',
             style: f.style(fontSize: 16, isBold: true)),
         pw.Text(formatMonthYear(month), style: f.style(fontSize: 12)),
         pw.SizedBox(height: 4),

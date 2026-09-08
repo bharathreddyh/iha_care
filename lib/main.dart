@@ -67,7 +67,7 @@ class IhaCareApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sahyadri Scan and Diagnostics',
+      title: 'IHA Care',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: const _AppGate(),

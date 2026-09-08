@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../../models/billing/incentive_record.dart';
 import '../../models/billing/referral_doctor.dart';
+import '../../services/auth_service.dart';
 import '../../services/billing_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/date_formatter.dart';
@@ -26,9 +27,13 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
 
   List<IncentiveRecord> _records = [];
   Map<String, ReferralDoctor> _doctors = {};
+  // Per-doctor list of individual bills (patient, date, scan, incentive)
+  Map<String, List<Map<String, dynamic>>> _detailByDoctor = {};
   bool _loading = false;
   bool _exporting = false;
   bool _exportingExcel = false;
+  // Doctor id currently being exported to a single-doctor PDF (null = none)
+  String? _exportingDoctorId;
 
   @override
   void initState() {
@@ -47,10 +52,21 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
     final records = await service.calculateMonthlyIncentives(_monthKey);
     final allDocs = await service.getReferralDoctors();
     final docMap = {for (final d in allDocs) d.id: d};
+
+    // Per-bill detail rows, grouped by doctor
+    final detailRows = await service.getReferralDetailForMonth(_monthKey);
+    final detailByDoctor = <String, List<Map<String, dynamic>>>{};
+    for (final row in detailRows) {
+      detailByDoctor
+          .putIfAbsent(row['referral_doctor_id'] as String, () => [])
+          .add(row);
+    }
+
     if (mounted) {
       setState(() {
         _records = records;
         _doctors = docMap;
+        _detailByDoctor = detailByDoctor;
         _loading = false;
       });
     }
@@ -145,6 +161,7 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
         month: _monthKey,
         rows: rows,
         doctors: _doctors,
+        clinicName: context.read<AuthService>().centreName ?? '',
       );
       await Printing.sharePdf(
         bytes: bytes,
@@ -152,6 +169,41 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
       );
     } finally {
       if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  /// Generates and shares a PDF for a single doctor's referrals this month.
+  Future<void> _exportDoctorPdf(IncentiveRecord record) async {
+    final List<Map<String, dynamic>> rows =
+        _detailByDoctor[record.referralDoctorId] ?? const [];
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No bill details to export.')),
+      );
+      return;
+    }
+
+    final doc = _doctors[record.referralDoctorId];
+    final docName = doc?.name ?? record.referralDoctorId;
+
+    setState(() => _exportingDoctorId = record.referralDoctorId);
+    try {
+      final bytes = await generateIncentiveReport(
+        month: _monthKey,
+        rows: rows,
+        doctors: {
+          if (doc != null) record.referralDoctorId: doc,
+        },
+        clinicName: context.read<AuthService>().centreName ?? '',
+      );
+      final safeName =
+          docName.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'incentive_${safeName}_$_monthKey.pdf',
+      );
+    } finally {
+      if (mounted) setState(() => _exportingDoctorId = null);
     }
   }
 
@@ -401,22 +453,25 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                         ],
                       ),
                       children: [
-                        if (r.breakdown.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text(
-                              'No rate breakdown available.\nTap recalculate to see details.',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          )
-                        else
-                          Padding(
+                        Builder(builder: (context) {
+                          final List<Map<String, dynamic>> bills =
+                              _detailByDoctor[r.referralDoctorId] ?? const [];
+                          if (bills.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text(
+                                'No bill details available.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            );
+                          }
+                          return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                             child: Table(
                               columnWidths: const {
                                 0: FlexColumnWidth(3),
-                                1: FlexColumnWidth(1),
-                                2: FlexColumnWidth(2),
+                                1: FlexColumnWidth(2),
+                                2: FlexColumnWidth(3),
                                 3: FlexColumnWidth(2),
                               },
                               children: [
@@ -427,35 +482,63 @@ class _IncentiveReportScreenState extends State<IncentiveReportScreen> {
                                         .surfaceContainerHighest,
                                   ),
                                   children: [
+                                    _cell('Patient', bold: true),
+                                    _cell('Date', bold: true),
                                     _cell('Scan', bold: true),
-                                    _cell('Count', bold: true),
-                                    _cell('Rate', bold: true),
-                                    _cell('Total', bold: true),
+                                    _cell('Incentive', bold: true),
                                   ],
                                 ),
-                                ...r.breakdown.map((b) => TableRow(children: [
-                                      _cell(b.scanTypeName),
-                                      _cell(b.count.toString()),
-                                      _cell(formatCurrency(b.rate)),
-                                      _cell(formatCurrency(b.total)),
+                                ...bills.map((b) => TableRow(children: [
+                                      _cell((b['patient_name'] as String?) ??
+                                          '—'),
+                                      _cell(formatDate(
+                                          (b['created_at'] as String?) ?? '')),
+                                      _cell(
+                                          (b['scan_type_name'] as String?) ??
+                                              'Unknown'),
+                                      _cell(formatCurrency(
+                                          (b['incentive_rate'] as num? ?? 0)
+                                              .toDouble())),
                                     ])),
                               ],
                             ),
+                          );
+                        }),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              OutlinedButton.icon(
+                                icon: _exportingDoctorId == r.referralDoctorId
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                    : const Icon(Icons.picture_as_pdf,
+                                        size: 16),
+                                label: const Text('PDF'),
+                                onPressed: _exportingDoctorId != null
+                                    ? null
+                                    : () => _exportDoctorPdf(r),
+                              ),
+                              if (r.paymentStatus == 'unpaid') ...[
+                                const SizedBox(width: 12),
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.check, size: 16),
+                                  label: const Text('Mark Paid'),
+                                  onPressed: () async {
+                                    await context
+                                        .read<BillingService>()
+                                        .markIncentivePaid(r.id);
+                                    _calculate();
+                                  },
+                                ),
+                              ],
+                            ],
                           ),
-                        if (r.paymentStatus == 'unpaid')
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.check, size: 16),
-                              label: const Text('Mark Paid'),
-                              onPressed: () async {
-                                await context
-                                    .read<BillingService>()
-                                    .markIncentivePaid(r.id);
-                                _calculate();
-                              },
-                            ),
-                          ),
+                        ),
                       ],
                     ),
                   );

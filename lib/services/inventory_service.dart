@@ -53,6 +53,16 @@ class InventoryService {
 
   Future<void> saveScanUsage(
       String scanTypeId, List<InventoryScanUsage> usages) async {
+    final existing = await _db.query(
+      'inventory_scan_usage',
+      columns: 'id',
+      where: 'scan_type_id = ?',
+      whereArgs: [scanTypeId],
+    );
+    final existingIds = existing.map((e) => e['id'] as String).toSet();
+    final keptIds = <String>{};
+    final now = DateTime.now().toIso8601String();
+
     await _db.transaction((txn) async {
       await txn.delete(
         'inventory_scan_usage',
@@ -63,9 +73,22 @@ class InventoryService {
         if (u.quantity > 0) {
           final map = u.toMap();
           map['synced'] = 0;
+          keptIds.add(map['id'] as String);
           await txn.insert('inventory_scan_usage', map,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
+      }
+      // Tombstone removed usage rows so the cloud copy is deleted too.
+      for (final id in existingIds.difference(keptIds)) {
+        await txn.insert(
+          'deleted_records',
+          {
+            'table_name': 'inventory_scan_usage',
+            'record_id': id,
+            'created_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
     });
   }

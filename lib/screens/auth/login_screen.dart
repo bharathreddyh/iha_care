@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/auth/app_centre.dart';
 import '../../services/auth_service.dart';
 import 'centre_picker_screen.dart';
+import 'centre_setup_screen.dart';
+import 'reset_password_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,18 +17,54 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _kRemember = 'login_remember';
+  static const _kSavedEmail = 'login_email';
+  static const _kSavedPassword = 'login_password';
+
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
+  bool _remember = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRemembered();
+  }
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRemembered() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kRemember) ?? false) {
+      if (!mounted) return;
+      setState(() {
+        _remember = true;
+        _email.text = prefs.getString(_kSavedEmail) ?? '';
+        _password.text = prefs.getString(_kSavedPassword) ?? '';
+      });
+    }
+  }
+
+  Future<void> _persistRemember() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_remember) {
+      await prefs.setBool(_kRemember, true);
+      await prefs.setString(_kSavedEmail, _email.text.trim());
+      await prefs.setString(_kSavedPassword, _password.text);
+    } else {
+      await prefs.remove(_kRemember);
+      await prefs.remove(_kSavedEmail);
+      await prefs.remove(_kSavedPassword);
+    }
   }
 
   Future<void> _signIn() async {
@@ -35,13 +75,17 @@ class _LoginScreenState extends State<LoginScreen> {
       final auth = context.read<AuthService>();
       final centres = await auth.signIn(_email.text.trim(), _password.text);
 
+      // Credentials were valid — honour the "remember me" choice.
+      await _persistRemember();
+
       if (!mounted) return;
 
       if (centres.isEmpty) {
-        setState(() {
-          _error = 'No centres assigned to this account. Contact the administrator.';
-          _loading = false;
-        });
+        // No centre yet → let the user create their own.
+        setState(() => _loading = false);
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CentreSetupScreen()),
+        );
         return;
       }
 
@@ -73,11 +117,36 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String _friendlyError(String raw) {
-    if (raw.contains('Invalid login credentials')) return 'Incorrect email or password.';
-    if (raw.contains('network') || raw.contains('SocketException')) {
-      return 'No internet connection. Check your network.';
+    final r = raw.toLowerCase();
+    if (r.contains('invalid login credentials')) {
+      return 'Incorrect email or password.';
     }
-    return 'Sign in failed. Please try again.';
+    if (r.contains('email not confirmed')) {
+      return 'Email not confirmed. Confirm it, or turn off "Confirm email" in Supabase.';
+    }
+    if (r.contains('failed host lookup') ||
+        r.contains('socketexception') ||
+        r.contains('connection refused') ||
+        r.contains('network is unreachable') ||
+        r.contains('connection closed') ||
+        r.contains('handshake') ||
+        r.contains('timed out') ||
+        r.contains('timeout')) {
+      return 'Can\'t reach the server. Internet may work in the browser but be '
+          'blocked for this app — allow iha_care.exe OUTBOUND in the firewall '
+          '(for the active network profile), and check any VPN/proxy.\n\n$raw';
+    }
+    // Surface the real error so problems can be diagnosed.
+    return 'Sign in failed: $raw';
+  }
+
+  void _forgotPassword() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ResetPasswordScreen(initialEmail: _email.text.trim()),
+      ),
+    );
   }
 
   @override
@@ -98,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Sahyadri Scan and Diagnostics',
+                      'IHA Care',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -143,6 +212,34 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Enter password' : null,
                     ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: _loading
+                                ? null
+                                : () =>
+                                    setState(() => _remember = !_remember),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _remember,
+                                  onChanged: _loading
+                                      ? null
+                                      : (v) => setState(
+                                          () => _remember = v ?? false),
+                                ),
+                                const Flexible(child: Text('Remember me')),
+                              ],
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _loading ? null : _forgotPassword,
+                          child: const Text('Forgot password?'),
+                        ),
+                      ],
+                    ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Container(
@@ -174,6 +271,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                   CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('Sign In'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const SignUpScreen()),
+                              ),
+                      child: const Text('New here? Create an account'),
                     ),
                   ],
                 ),

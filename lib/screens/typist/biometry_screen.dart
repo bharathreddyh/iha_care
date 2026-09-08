@@ -72,8 +72,8 @@ class _BiometryScreenState extends State<BiometryScreen> {
                     _meta('Patient', widget.bill.patientName),
                     if (widget.bill.patientId?.isNotEmpty == true)
                       _meta('ID', widget.bill.patientId!),
-                    if (widget.bill.patientDob?.isNotEmpty == true)
-                      _meta('DOB', widget.bill.patientDob!),
+                    if (widget.bill.patientAge != null)
+                      _meta('Age', '${widget.bill.patientAge} yrs'),
                     _meta('Accession', widget.bill.accessionNumber ?? '-'),
                     _meta('Study date', formatDateTime(widget.bill.createdAt)),
                   ],

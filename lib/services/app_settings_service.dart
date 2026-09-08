@@ -6,9 +6,10 @@ import '../database/database_helper.dart';
 
 enum AppRole { receptionist, typist }
 
-const _kDefaultHeader1 = 'Sahyadri Scan and Diagnostics';
+// Neutral defaults — each centre sets its own letterhead in Bill Settings.
+const _kDefaultHeader1 = 'Your Centre Name';
 const _kDefaultHeader2 = 'Scan and Diagnostics Centre';
-const _kDefaultFooter  = 'Thank you for visiting Sahyadri Scan and Diagnostics';
+const _kDefaultFooter  = 'Thank you for visiting';
 
 class AppSettingsService extends ChangeNotifier {
   final _db = DatabaseHelper.instance;
