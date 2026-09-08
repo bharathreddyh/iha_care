@@ -117,11 +117,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String _friendlyError(String raw) {
-    if (raw.contains('Invalid login credentials')) return 'Incorrect email or password.';
-    if (raw.contains('network') || raw.contains('SocketException')) {
-      return 'No internet connection. Check your network.';
+    final r = raw.toLowerCase();
+    if (r.contains('invalid login credentials')) {
+      return 'Incorrect email or password.';
     }
-    return 'Sign in failed. Please try again.';
+    if (r.contains('email not confirmed')) {
+      return 'Email not confirmed. Confirm it, or turn off "Confirm email" in Supabase.';
+    }
+    if (r.contains('failed host lookup') ||
+        r.contains('socketexception') ||
+        r.contains('connection refused') ||
+        r.contains('network is unreachable') ||
+        r.contains('connection closed') ||
+        r.contains('handshake') ||
+        r.contains('timed out') ||
+        r.contains('timeout')) {
+      return 'Can\'t reach the server. Internet may work in the browser but be '
+          'blocked for this app — allow iha_care.exe OUTBOUND in the firewall '
+          '(for the active network profile), and check any VPN/proxy.\n\n$raw';
+    }
+    // Surface the real error so problems can be diagnosed.
+    return 'Sign in failed: $raw';
   }
 
   void _forgotPassword() {
